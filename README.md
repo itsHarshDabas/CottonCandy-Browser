@@ -4,7 +4,17 @@ The web browser of [GraceOS](https://github.com/itsHarshDabas/GraceOS). It's Chr
 
 Like CandySole, it's one Python file (`cottoncandy`) with a `.desktop` file, an icon and tests next to it.
 
-![chrome://sandbox and find in page](docs/screenshots/sandbox-and-find.png)
+## Design
+These screenshots show the **target design**, taken from the mockup. They are not the current app.
+- Spec: [docs/design/2026-10-20-cottoncandy-ui.md](docs/design/2026-10-20-cottoncandy-ui.md).
+- Interactive mockup: [docs/design/mockups/cottoncandy-ui.html](docs/design/mockups/cottoncandy-ui.html). Open it locally to switch theme, accent, corners, blur, motion and AI.
+- §7 of the spec lists what v0 still has to change to match.
+
+| Dark | Light |
+|---|---|
+| ![Browser, dark](docs/design/screenshots/browser-dark.png) | ![Browser, light](docs/design/screenshots/browser-light.png) |
+| ![New tab, dark](docs/design/screenshots/newtab-dark.png) | ![New tab, light](docs/design/screenshots/newtab-light.png) |
+| ![Grace panel (AI on)](docs/design/screenshots/grace-panel.png) | ![New tab with AI off](docs/design/screenshots/ai-off-newtab.png) |
 
 ## Features
 - **Tabs**
@@ -82,3 +92,9 @@ The browser itself is checked by hand. On 2026-10-20 it was run as a normal user
 - Ctrl+Q quit with status 0.
 
 Not checked yet: Wayland/Hyprland, video codecs, camera and microphone (the test machine had none), and Arch's own packages.
+
+Screenshots of v0 itself, from that run:
+
+| `chrome://sandbox` and find in page | History and a bookmark | Downloads |
+|---|---|---|
+| ![v0: chrome://sandbox and find](docs/screenshots/sandbox-and-find.png) | ![v0: history](docs/screenshots/history-and-bookmark.png) | ![v0: downloads](docs/screenshots/downloads.png) |

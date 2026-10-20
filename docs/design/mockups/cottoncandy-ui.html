@@ -1,0 +1,1032 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>CottonCandy UI mockup</title>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;650&family=Fira+Code:wght@400;500&display=swap');
+
+/* ============ Document page (not part of the browser) ============ */
+:root{--doc-bg:#e9ebef;--doc-text:#1d1f24;--doc-muted:#575d6a;--doc-hair:rgba(0,0,0,.08)}
+*{box-sizing:border-box}
+body{margin:0;background:var(--doc-bg);color:var(--doc-text);font:13px/1.5 Inter,system-ui,sans-serif;
+  /* set live by the controls */
+  --accent-base:#3584e4;--accent-fill:#2f75cb;--accent-fg:#4b92e7;--accent-fg-light:#2663a9;--accent-tint:#20324d;
+  --radius:12px;--gap:10px;--blur:7px;--motion:1}
+.doc{max-width:1320px;margin:0 auto;padding:28px 20px 80px}
+.doc h1{font-size:26px;font-weight:650;letter-spacing:-.02em;margin:0 0 4px}
+.doc h2{font-size:18px;font-weight:650;letter-spacing:-.01em;margin:44px 0 4px}
+.doc h3{font-size:13px;font-weight:600;margin:22px 0 8px;color:var(--doc-muted);text-transform:none}
+.doc p.lead{color:var(--doc-muted);margin:0 0 14px;max-width:880px}
+.doc code{font-family:"Fira Code",ui-monospace,monospace;font-size:12px;background:rgba(0,0,0,.05);padding:1px 5px;border-radius:5px}
+
+/* Controls: the doc page's own UI, styled in the light Grace style */
+.controls{position:sticky;top:0;z-index:100;margin:16px -20px 0;padding:10px 20px;display:flex;flex-wrap:wrap;gap:8px 18px;align-items:center;
+  background:rgba(233,235,239,.86);backdrop-filter:blur(14px);border-bottom:1px solid var(--doc-hair)}
+.ctl{display:flex;align-items:center;gap:8px;font-size:12px;color:var(--doc-muted);font-weight:500}
+.seg{display:inline-flex;background:rgba(0,0,0,.05);border-radius:9px;padding:2px}
+.seg button{border:0;background:transparent;font:500 12px Inter,system-ui;color:#2b2f37;padding:4px 10px;border-radius:7px;cursor:pointer}
+.seg button[aria-pressed=true]{background:#fff;box-shadow:0 1px 2px rgba(0,0,0,.12)}
+.swatches{display:flex;gap:6px}
+.swatches button{width:18px;height:18px;border-radius:50%;border:0;cursor:pointer;box-shadow:inset 0 0 0 1px rgba(0,0,0,.2)}
+.swatches button[aria-pressed=true]{outline:2px solid #1d1f24;outline-offset:2px}
+.ctl input[type=range]{width:96px;accent-color:var(--accent-fill)}
+.ctl output{font-variant-numeric:tabular-nums;width:34px;color:#2b2f37}
+.doc button:focus-visible,.doc input:focus-visible{outline:2px solid var(--accent-fg-light);outline-offset:2px}
+
+.grid2{display:grid;grid-template-columns:repeat(auto-fit,minmax(560px,1fr));gap:22px}
+.caption{font-size:12px;color:var(--doc-muted);margin:8px 2px 0}
+.caption b{color:var(--doc-text);font-weight:600}
+
+/* The desktop behind a window (the Grace wallpaper) */
+.stage{position:relative;border-radius:14px;overflow:hidden;padding:calc(var(--gap) + 14px);
+  background:radial-gradient(110% 90% at 12% 8%,color-mix(in srgb,var(--accent-base) 20%,#1b1e27) 0%,transparent 60%),
+             radial-gradient(90% 80% at 92% 95%,#232733 0%,transparent 60%),#121419}
+.stage.light{background:radial-gradient(110% 90% at 12% 8%,color-mix(in srgb,var(--accent-base) 18%,#f6f6f8) 0%,transparent 60%),
+             linear-gradient(135deg,#f6f6f8,#dfe2ea)}
+.stage.tiled{padding:var(--gap);display:grid;grid-template-columns:1.7fr 1fr;gap:var(--gap)}
+.stage .other{border-radius:var(--radius);background:#121419;box-shadow:0 0 0 1px rgba(255,255,255,.07),0 10px 28px rgba(0,0,0,.44);
+  font:12px/1.6 "Fira Code",ui-monospace,monospace;color:#b8bdcc;padding:12px 14px;overflow:hidden}
+.stage .other .tl{margin-bottom:10px}
+
+/* ============ CottonCandy (everything below is the browser) ============ */
+.cc{--r-sm:7px;--r-md:9px;--r-lg:12px;--r-xl:14px;--r-panel:calc(var(--radius) + 8px);
+  --pad:max(6px,var(--gap));
+  --ease-in:cubic-bezier(.2,.9,.25,1);--ease-out:cubic-bezier(.4,0,.6,1);
+  --fast:calc(150ms * var(--motion));--normal:calc(240ms * var(--motion));--slow:calc(380ms * var(--motion));
+  --win-edge:rgba(255,255,255,.14);--win-edge-off:rgba(255,255,255,.07);
+  font:13px/1.4 Inter,system-ui,sans-serif;letter-spacing:-.005em;color:var(--text);-webkit-font-smoothing:antialiased}
+.cc[data-theme=dark]{color-scheme:dark;
+  --desktop:#121419;--window:#1c1e25;--titlebar:#181a20;--sidebar:#17191f;
+  --panel-glass:rgba(22,24,31,.82);--panel-solid:#17191f;
+  --hair:rgba(255,255,255,.08);--subtle:rgba(255,255,255,.05);--card:rgba(255,255,255,.045);
+  --control:rgba(255,255,255,.065);--control-strong:rgba(255,255,255,.09);--control-hover:rgba(255,255,255,.12);
+  --selected:rgba(255,255,255,.14);--track:rgba(255,255,255,.12);
+  --text-strong:#f1f2f6;--text:#e6e8ee;--text-control:#d9dce5;--text-secondary:#8a90a0;--text-tertiary:#7d8392;
+  --success:#7ed99c;--error:#ff8a8a;
+  --a-text:var(--accent-fg);--tint:var(--accent-tint);
+  --shadow-pop:0 14px 34px rgba(0,0,0,.45);--shadow-win:0 10px 28px rgba(0,0,0,.44);
+  --site-bg:#16181d;--site-text:#d6d9e1;--site-muted:#8f95a3;--site-link:#7fb0f0;--site-code:#0f1115}
+.cc[data-theme=light]{color-scheme:light;
+  --desktop:#f3f4f6;--window:#ffffff;--titlebar:#ebecef;--sidebar:#f0f1f4;
+  --panel-glass:rgba(250,250,251,.86);--panel-solid:#fafafb;
+  --hair:rgba(0,0,0,.08);--subtle:rgba(0,0,0,.06);--card:rgba(0,0,0,.035);
+  --control:rgba(0,0,0,.05);--control-strong:rgba(0,0,0,.07);--control-hover:rgba(0,0,0,.08);
+  --selected:rgba(0,0,0,.10);--track:rgba(0,0,0,.10);
+  --text-strong:#14161a;--text:#1d1f24;--text-control:#2b2f37;--text-secondary:#575d6a;--text-tertiary:#868b97;
+  --success:#1a7f37;--error:#c01c28;
+  --a-text:var(--accent-fg-light);--tint:color-mix(in srgb,var(--accent-base) 14%,#f3f4f6);
+  --shadow-pop:0 14px 34px rgba(0,0,0,.16);--shadow-win:0 10px 28px rgba(0,0,0,.18);
+  --site-bg:#ffffff;--site-text:#24262b;--site-muted:#5c6270;--site-link:#1f5fa8;--site-code:#f3f4f6}
+.cc{--panel:var(--panel-glass)}
+body.noblur .cc{--panel:var(--panel-solid)}
+@media (prefers-reduced-motion:reduce){.cc{--motion:0}}
+
+.cc svg.i{width:16px;height:16px;fill:none;stroke:currentColor;stroke-width:1.7;stroke-linecap:round;stroke-linejoin:round;flex:none;display:block}
+.cc svg.i.s14{width:14px;height:14px}.cc svg.i.s18{width:18px;height:18px}.cc svg.i.s20{width:20px;height:20px}.cc svg.i.s28{width:28px;height:28px}
+/* Reset with zero specificity so component classes (.pill, .li, .ib) always win */
+:where(.cc) button{font:inherit;color:inherit;border:0;background:none;padding:0;margin:0;cursor:default}
+.cc [hidden]{display:none!important}
+.cc :focus-visible{outline:2px solid var(--a-text);outline-offset:1px}
+.cc .mono{font-family:"Fira Code",ui-monospace,monospace}
+.cc kbd{font:500 10.5px Inter,system-ui;color:var(--text-secondary);padding:1px 5px;border-radius:5px;background:var(--control)}
+
+/* Window */
+.win:focus{outline:none}
+.win{position:relative;display:flex;flex-direction:column;overflow:hidden;border-radius:var(--radius);background:var(--window);
+  box-shadow:0 0 0 1px var(--win-edge),var(--shadow-win);height:600px;min-width:0}
+.win.inactive{box-shadow:0 0 0 1px var(--win-edge-off),var(--shadow-win)}
+.win.short{height:520px}
+.win.tall{height:660px}
+
+/* Traffic lights */
+.tl{display:flex;gap:7px;align-items:center;flex:none;padding:0 4px 0 2px}
+.tl button{width:11px;height:11px;border-radius:50%;display:grid;place-items:center;box-shadow:inset 0 0 0 .5px rgba(0,0,0,.28)}
+.tl .c{background:#ff5f57}.tl .m{background:#febc2e}.tl .x{background:#28c840}
+.tl svg{width:9px;height:9px;fill:none;stroke:rgba(0,0,0,.55);stroke-width:2.4;stroke-linecap:round;opacity:0;transition:opacity var(--fast)}
+.tl:hover svg,.tl:focus-within svg{opacity:1}
+.win.inactive .tl button{background:var(--control-hover)}
+
+/* Chrome */
+.chrome{flex:none;background:var(--titlebar);position:relative;border-bottom:1px solid var(--subtle)}
+.row{display:flex;align-items:center;gap:6px;padding:0 var(--pad);min-width:0}
+.tabsrow{height:40px}
+.toolbar{height:40px;gap:4px}
+.chrome.compact .toolbar{height:44px}
+.spacer{flex:1}
+
+/* Tabs */
+.tabs{display:flex;gap:4px;min-width:0;flex:0 1 auto;overflow-x:auto;scrollbar-width:none;padding:0 1px}
+.tabs::-webkit-scrollbar{display:none}
+.tab{flex:0 1 200px;min-width:112px;height:30px;display:flex;align-items:center;gap:8px;padding:0 5px 0 8px;border-radius:var(--r-md);
+  color:var(--text-secondary);font-size:12.5px;position:relative;transition:background var(--fast) var(--ease-out),color var(--fast)}
+.tab:hover{background:var(--control-hover);color:var(--text)}
+.tab.active{background:var(--selected);color:var(--text-strong)}
+.tab .t{flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.tab .st{color:var(--a-text);display:grid;place-items:center}
+.tab .st.muted{color:var(--text-secondary)}
+.tab .x{width:20px;height:20px;border-radius:6px;display:grid;place-items:center;opacity:0;color:var(--text-secondary);flex:none}
+.tab:hover .x,.tab.active .x,.tab .x:focus-visible{opacity:1}
+.tab .x:hover{background:var(--control-hover);color:var(--text)}
+.tab.pinned{flex:0 0 36px;min-width:36px;padding:0;justify-content:center}
+.tab.pinned .t,.tab.pinned .x{display:none}
+.tab.crashed .t{color:var(--text-secondary)}
+.tab.crashed .fav-crash{color:var(--error)}
+.tab .attn{position:absolute;left:19px;top:6px;width:6px;height:6px;border-radius:50%;background:var(--accent-fill);box-shadow:0 0 0 1.5px var(--titlebar)}
+.tab.dragging{background:var(--selected);color:var(--text-strong);box-shadow:var(--shadow-pop);transform:translateY(-1px) scale(1.02);z-index:2}
+.tabs.crowded .tab:not(.active){flex:0 0 36px;min-width:36px;padding:0;justify-content:center}
+.tabs.crowded .tab:not(.active) .t,.tabs.crowded .tab:not(.active) .x,.tabs.crowded .tab:not(.active) .st{display:none}
+.rec{width:8px;height:8px;border-radius:50%;background:var(--accent-fill);animation:pulse calc(1400ms * var(--motion)) ease-in-out infinite}
+@keyframes pulse{50%{opacity:.35}}
+
+/* Favicons: placeholders for the sites' real icons */
+.fav{width:16px;height:16px;border-radius:4px;flex:none;display:grid;place-items:center;background:var(--fc);color:#fff;font:700 9.5px/1 Inter,system-ui;letter-spacing:0}
+.fav.big{width:32px;height:32px;border-radius:8px;font-size:15px}
+.fav.internal{background:none;color:var(--text-secondary)}
+.spin{width:16px;height:16px;flex:none;color:var(--a-text);animation:spin .9s linear infinite}
+body[data-motion=off] .spin,body[data-motion=off] .rec{animation:none}
+@media (prefers-reduced-motion:reduce){.spin,.rec{animation:none}}
+@keyframes spin{to{transform:rotate(360deg)}}
+
+/* Icon buttons */
+.ib{width:30px;height:30px;border-radius:50%;display:grid;place-items:center;color:var(--text-control);flex:none;transition:background var(--fast) var(--ease-out)}
+.ib.sm{width:24px;height:24px}
+.ib:hover{background:var(--control-hover)}
+.ib:active,.ib.on{background:var(--selected)}
+.ib:disabled{color:var(--text-tertiary);background:none}
+.ib.ai{color:var(--a-text)}
+.ib .badge{position:absolute}
+.ib.dl{position:relative}
+.ib.dl .ring{position:absolute;inset:3px;border-radius:50%;background:conic-gradient(var(--accent-fill) var(--p),transparent 0);
+  -webkit-mask:radial-gradient(circle,transparent 11px,#000 11.5px);mask:radial-gradient(circle,transparent 11px,#000 11.5px)}
+
+/* Address bar */
+.addr{flex:1;min-width:0;height:30px;border-radius:var(--r-md);background:var(--control);display:flex;align-items:center;gap:4px;padding:0 3px 0 3px;
+  border:1px solid transparent;position:relative;transition:background var(--fast),border-color var(--fast)}
+.addr:hover{background:var(--control-strong)}
+.addr.focus{border-color:var(--a-text);background:var(--control)}
+.addr .site{width:26px;height:24px;border-radius:var(--r-sm);display:grid;place-items:center;color:var(--text-secondary);flex:none}
+.addr .site:hover{background:var(--control-hover)}
+.addr .site.warn{color:var(--error)}
+.addr .site.on{background:var(--selected)}
+.addr .url{flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-size:13px;padding:0 2px;cursor:text}
+.addr .host{color:var(--text)}.addr .rest{color:var(--text-secondary)}
+.addr .ph{color:var(--text-secondary)}
+.addr input{flex:1;min-width:0;background:transparent;border:0;outline:0;color:var(--text);font:inherit;font-size:13px;padding:0 2px}
+.addr input::selection{background:color-mix(in srgb,var(--accent-fill) 55%,transparent)}
+.addr .notsecure{font-size:12px;color:var(--error);white-space:nowrap;padding-right:6px;border-right:1px solid var(--hair);margin-right:2px}
+
+/* Surfaces that float: menus, popovers, dropdown */
+.pop{position:absolute;z-index:30;background:var(--panel);backdrop-filter:blur(calc(var(--blur) * 2)) saturate(140%);-webkit-backdrop-filter:blur(calc(var(--blur) * 2)) saturate(140%);
+  border:1px solid var(--hair);border-radius:var(--r-xl);box-shadow:var(--shadow-pop);padding:6px;
+  animation:pop-in var(--normal) var(--ease-in)}
+@keyframes pop-in{from{opacity:0;transform:translateY(-4px) scale(.98)}}
+.pop .grp{font-size:11px;font-weight:500;color:var(--text-secondary);padding:8px 10px 4px}
+.pop hr{border:0;height:1px;background:var(--hair);margin:5px 6px}
+.li{height:34px;display:flex;align-items:center;gap:10px;padding:0 10px;border-radius:var(--r-md);color:var(--text);width:100%;text-align:left;font-size:13px}
+.li.dense{height:32px}
+.li:hover{background:var(--control-hover)}
+.li.sel{background:var(--selected);color:var(--text-strong)}
+.li[aria-disabled=true]{color:var(--text-tertiary)}
+.li .ic{color:var(--text-secondary);display:grid;place-items:center;width:16px}
+.li .ic.ai{color:var(--a-text)}
+.li .main{flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.li .sub{color:var(--text-secondary);font-size:12px}
+.li .tail{margin-left:auto;color:var(--text-secondary);font-size:12px;display:flex;gap:6px;align-items:center;flex:none}
+.dropdown{left:-1px;right:-1px;top:calc(100% + 6px)}
+.dropdown mark{background:none;color:inherit;font-weight:600}
+.menu{right:var(--pad);top:calc(100% - 2px);width:290px}
+.menu .zoom{display:flex;align-items:center;gap:6px;padding:4px 6px 4px 10px;height:38px}
+.menu .zoom .lbl{flex:1}
+.menu .zoom .val{width:44px;text-align:center;font-variant-numeric:tabular-nums;color:var(--text)}
+
+/* Pills (buttons) */
+.pill{height:24px;padding:0 12px;border-radius:999px;font:500 12px/1 Inter,system-ui;display:inline-flex;align-items:center;gap:6px;
+  background:var(--control-strong);color:var(--text-control);white-space:nowrap;transition:background var(--fast) var(--ease-out)}
+.pill:hover{background:var(--control-hover)}
+.pill.primary{background:var(--accent-fill);color:#fff}
+.pill.primary:hover{background:color-mix(in srgb,var(--accent-fill) 90%,#000)}
+.pill.primary:active{background:color-mix(in srgb,var(--accent-fill) 82%,#000)}
+.pill.ghost{background:none;color:var(--text-secondary)}
+.pill.ghost:hover{background:var(--control-hover);color:var(--text)}
+.pill:disabled{background:var(--control);color:var(--text-tertiary)}
+.pill.lg{height:30px;padding:0 14px;font-size:12.5px}
+
+/* Text field */
+.field{height:30px;border-radius:var(--r-md);background:var(--control);border:1px solid transparent;display:flex;align-items:center;gap:8px;padding:0 10px;color:var(--text-secondary);font-size:13px;min-width:0}
+.field input{flex:1;min-width:0;background:none;border:0;outline:0;font:inherit;color:var(--text)}
+.field input::placeholder{color:var(--text-secondary)}
+.field:hover{background:var(--control-strong)}
+.field:focus-within,.field.focus{border-color:var(--a-text)}
+.field.invalid{border-color:var(--error)}
+
+/* Approval / permission card */
+.perm{width:340px;padding:14px}
+.perm .head{display:flex;gap:10px;align-items:flex-start}
+.perm .badge{width:30px;height:30px;border-radius:var(--r-md);background:var(--control-strong);display:grid;place-items:center;color:var(--text-control);flex:none}
+.perm .badge.ai{color:var(--a-text)}
+.perm b{font-weight:600;color:var(--text-strong)}
+.perm p{margin:3px 0 0;color:var(--text-secondary);font-size:12px}
+.perm .btns{display:flex;gap:6px;margin-top:12px}
+.perm .details{margin-top:10px;padding:8px 10px;border-radius:var(--r-md);background:var(--card);font-size:12px;color:var(--text-secondary);display:grid;grid-template-columns:auto 1fr;gap:3px 12px}
+.perm .details span:nth-child(odd){color:var(--text-tertiary)}
+.perm .details span:nth-child(even){color:var(--text)}
+.siteinfo{left:-1px;top:calc(100% + 6px)}
+
+/* Downloads */
+.dls{right:var(--pad);top:calc(100% - 2px);width:370px}
+.dl-row{display:flex;gap:10px;align-items:center;padding:8px 8px 8px 10px;border-radius:var(--r-md)}
+.dl-row:hover{background:var(--control-hover)}
+.dl-row .fi{width:30px;height:30px;border-radius:var(--r-md);background:var(--control-strong);display:grid;place-items:center;color:var(--text-control);flex:none}
+.dl-row .meta{flex:1;min-width:0}
+.dl-row .name{color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.dl-row .stat{font-size:12px;color:var(--text-secondary);font-variant-numeric:tabular-nums}
+.dl-row .stat.failed{color:var(--error)}
+.bar{height:4px;border-radius:2px;background:var(--track);margin:5px 0 4px;overflow:hidden}
+.bar i{display:block;height:100%;border-radius:2px;background:var(--accent-fill)}
+.bar.paused i{background:var(--text-tertiary)}
+
+/* Page-load progress */
+.progress{position:absolute;left:0;right:0;bottom:-1px;height:2px;background:var(--track);z-index:2}
+.progress i{display:block;height:100%;width:var(--w,35%);background:var(--accent-fill);transition:width var(--slow) var(--ease-in)}
+.progress.run i{animation:load calc(1600ms * max(var(--motion),.01)) var(--ease-in) forwards}
+@keyframes load{from{width:4%}to{width:92%}}
+
+/* Find bar */
+.findbar{flex:none;height:42px;display:flex;align-items:center;gap:6px;padding:0 var(--pad);background:var(--titlebar);border-bottom:1px solid var(--subtle);
+  animation:slide-down var(--normal) var(--ease-in)}
+@keyframes slide-down{from{margin-top:-42px;opacity:0}}
+.findbar .field{width:280px}
+.findbar .count{font-size:12px;color:var(--text-secondary);font-variant-numeric:tabular-nums;min-width:64px}
+.findbar .count.none{color:var(--error)}
+.chk{display:inline-flex;align-items:center;gap:6px;font-size:12px;color:var(--text-control);padding:0 8px;height:24px;border-radius:999px}
+.chk:hover{background:var(--control-hover)}
+.chk[aria-pressed=true]{background:var(--selected);color:var(--text-strong)}
+
+/* Bookmarks bar */
+.bmbar{height:30px;display:flex;align-items:center;gap:2px;padding:0 var(--pad) 4px;overflow:hidden}
+.bm{height:24px;display:inline-flex;align-items:center;gap:6px;padding:0 8px;border-radius:var(--r-sm);font-size:12px;color:var(--text-control);white-space:nowrap}
+.bm:hover{background:var(--control-hover)}
+
+/* Body: rail + content + side panel */
+.body{flex:1;display:flex;min-height:0;position:relative}
+.content{flex:1;min-width:0;position:relative;overflow:hidden;background:var(--window)}
+.rail{width:224px;flex:none;background:var(--sidebar);border-right:1px solid var(--subtle);padding:8px;display:flex;flex-direction:column;gap:2px;overflow:auto}
+.rail .tab{flex:none;width:100%;min-width:0;height:32px}
+.rail .tab.pinned{width:36px}
+.rail .newtab{height:32px;display:flex;align-items:center;gap:8px;padding:0 8px;border-radius:var(--r-md);color:var(--text-secondary);font-size:12.5px;margin-bottom:6px}
+.rail .newtab:hover{background:var(--control-hover);color:var(--text)}
+.rail .grp{font-size:11px;font-weight:500;color:var(--text-secondary);padding:10px 8px 4px}
+
+/* Private marker: neutral, never a theme */
+.private{height:22px;display:inline-flex;align-items:center;gap:6px;padding:0 9px;border-radius:999px;background:var(--control-strong);color:var(--text-control);font-size:11.5px;font-weight:500;flex:none}
+
+/* Chips */
+.chip{height:22px;padding:0 9px;border-radius:999px;background:var(--control);font-size:11px;font-weight:500;color:var(--text-secondary);display:inline-flex;align-items:center;gap:6px;white-space:nowrap}
+.chip .dot{width:6px;height:6px;border-radius:50%;background:var(--success)}
+.chip.remote{color:var(--text-control);background:var(--control-strong)}
+
+/* A web page (stands in for site content; sites draw their own colors) */
+.webpage{position:absolute;inset:0;overflow:auto;background:var(--site-bg);color:var(--site-text);font:14px/1.6 Inter,system-ui,sans-serif}
+.webpage .sitebar{height:44px;display:flex;align-items:center;gap:18px;padding:0 28px;border-bottom:1px solid rgba(127,127,127,.18);font-size:13px;color:var(--site-muted)}
+.webpage .sitebar b{color:var(--site-text);font-weight:600}
+.webpage .wrap{max-width:720px;padding:22px 28px 40px}
+.webpage h1{font-size:26px;margin:0 0 6px;font-weight:650;letter-spacing:-.015em}
+.webpage h2{font-size:17px;margin:22px 0 6px;font-weight:600}
+.webpage p{margin:0 0 10px;color:var(--site-text)}
+.webpage .muted{color:var(--site-muted)}
+.webpage a{color:var(--site-link)}
+.webpage pre{font:12.5px/1.6 "Fira Code",ui-monospace,monospace;background:var(--site-code);padding:10px 12px;border-radius:8px;margin:0 0 10px;overflow:auto}
+.webpage mark{background:rgba(255,200,0,.42);color:inherit;border-radius:2px}
+.webpage mark.cur{background:rgba(255,140,0,.75)}
+
+/* New tab page */
+.ntp{position:absolute;inset:0;overflow:auto;background:radial-gradient(60% 55% at 50% 28%,var(--tint) 0%,transparent 72%),var(--desktop);
+  display:flex;flex-direction:column;align-items:center;padding:clamp(48px,14%,120px) 20px 40px}
+.ntp-field{width:min(580px,100%);height:44px;border-radius:var(--r-xl);background:var(--control);border:1px solid var(--hair);display:flex;align-items:center;gap:10px;padding:0 8px 0 14px;font-size:15px;color:var(--text-secondary);transition:border-color var(--fast)}
+.ntp-field:hover{background:var(--control-strong)}
+.ntp-field:focus-within{border-color:var(--a-text)}
+.ntp-field input{flex:1;background:none;border:0;outline:0;font:inherit;color:var(--text);min-width:0}
+.ntp-field input::placeholder{color:var(--text-secondary)}
+.ntp-field .lead{color:var(--text-secondary);display:grid}
+.ntp-field .lead.ai{color:var(--a-text)}
+.ntp-hint{margin-top:10px;font-size:12px;color:var(--text-secondary);display:flex;align-items:center;gap:7px}
+.ntp-hint .ai{color:var(--a-text)}
+.shortcuts{display:grid;grid-template-columns:repeat(auto-fill,82px);justify-content:center;gap:6px 12px;margin-top:30px;width:min(620px,100%)}
+.sc{display:flex;flex-direction:column;align-items:center;gap:8px;padding:12px 4px 10px;border-radius:var(--r-lg);color:var(--text-secondary);font-size:12px;text-decoration:none;
+  transition:transform var(--fast) var(--ease-in),background var(--fast),color var(--fast)}
+.sc:hover{transform:translateY(-3px);background:var(--card);color:var(--text)}
+.sc span{max-width:74px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.recent{width:min(580px,100%);margin-top:26px}
+.recent .grp{font-size:11px;font-weight:500;color:var(--text-secondary);padding:0 10px 4px}
+.ntp-foot{position:absolute;left:var(--pad);bottom:var(--pad);display:flex;gap:8px}
+.ntp-note svg{margin:0 auto 6px}
+.ntp-note{margin-top:12px;font-size:12px;color:var(--text-secondary);max-width:520px;text-align:center}
+
+/* Error / offline pages (new tab page style) */
+.err{position:absolute;inset:0;background:var(--desktop);display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;padding:24px}
+.err .big{color:var(--text-secondary);margin-bottom:14px}
+.err .big.bad{color:var(--error)}
+.err h1{font-size:20px;font-weight:650;letter-spacing:-.01em;margin:0 0 6px;color:var(--text-strong)}
+.err p{margin:0 0 4px;color:var(--text-secondary);max-width:440px}
+.err .code{margin:10px 0 18px;font:12px "Fira Code",ui-monospace,monospace;color:var(--text-secondary);background:var(--control);padding:2px 8px;border-radius:6px}
+.err .btns{display:flex;gap:8px}
+.err .ask{margin-top:14px;font-size:12px;color:var(--a-text);display:inline-flex;gap:6px;align-items:center;padding:3px 9px;border-radius:999px}
+.err .ask:hover{background:var(--control-hover)}
+
+/* Settings page (Grace Settings layout) */
+.settings{position:absolute;inset:0;display:flex;background:var(--window)}
+.settings .side{width:224px;flex:none;background:var(--sidebar);padding:10px 8px;overflow:auto;border-right:1px solid var(--subtle)}
+.settings .side .field{margin:2px 2px 8px}
+.settings .side .grp{font-size:11px;font-weight:500;color:var(--text-secondary);margin:12px 10px 4px}
+.settings .page{flex:1;overflow:auto;padding:22px 28px}
+.settings h1{font-size:20px;font-weight:650;letter-spacing:-.01em;margin:0 0 2px;color:var(--text-strong)}
+.settings .lead{color:var(--text-secondary);margin:0 0 16px}
+.box{border-radius:var(--r-lg);background:var(--card);border:1px solid var(--hair);margin-bottom:14px}
+.box .r{display:flex;align-items:center;justify-content:space-between;gap:16px;padding:0 14px;min-height:50px;border-top:1px solid var(--subtle)}
+.box .r:first-child{border-top:0}
+.box .r p{margin:0;color:var(--text)}
+.box .r p small{display:block;color:var(--text-secondary);font-size:11.5px;margin-top:1px}
+.toggle{width:40px;height:22px;border-radius:999px;background:var(--accent-fill);position:relative;flex:none;transition:background var(--fast)}
+.toggle::after{content:"";position:absolute;top:3px;left:21px;width:16px;height:16px;border-radius:50%;background:#fff;box-shadow:0 1px 2px rgba(0,0,0,.3);transition:left var(--fast) var(--ease-in)}
+.toggle[aria-checked=false]{background:var(--control-hover)}
+.toggle[aria-checked=false]::after{left:3px}
+.segc{white-space:nowrap;display:inline-flex;background:var(--control);border-radius:var(--r-md);padding:3px}
+.segc span{padding:4px 12px;border-radius:var(--r-sm);color:var(--text-control);font-size:12.5px}
+.segc span.on{background:var(--selected);color:var(--text-strong)}
+.drop{display:inline-flex;align-items:center;gap:8px;height:30px;padding:0 10px 0 12px;border-radius:var(--r-md);background:var(--control-strong);color:var(--text-control);font-size:12.5px}
+
+/* AI side panel */
+.aip{width:320px;flex:none;background:var(--sidebar);border-left:1px solid var(--subtle);display:flex;flex-direction:column;min-height:0;animation:panel-in var(--normal) var(--ease-in)}
+@keyframes panel-in{from{margin-right:-320px;opacity:0}}
+.aip-h{height:44px;display:flex;align-items:center;gap:8px;padding:0 6px 0 14px;flex:none}
+.aip-h b{font-weight:600;color:var(--text-strong)}
+.aip-b{flex:1;overflow:auto;padding:4px 10px 14px;display:flex;flex-direction:column;gap:10px}
+.aip .where{display:flex;align-items:center;gap:8px;padding:0 4px;font-size:12px;color:var(--text-secondary)}
+.card{border-radius:var(--r-lg);background:var(--card);border:1px solid var(--hair);padding:12px}
+.card h4{margin:0 0 6px;font-size:12px;font-weight:600;color:var(--text-strong);display:flex;align-items:center;gap:7px}
+.card h4 .ai{color:var(--a-text)}
+.card ul{margin:0;padding-left:18px;color:var(--text);font-size:12.5px;line-height:1.55}
+.card .foot{margin-top:10px;display:flex;gap:6px;align-items:center}
+.card .note{font-size:11.5px;color:var(--text-secondary);margin-top:8px;line-height:1.45}
+
+/* Component sheet */
+.sheet{display:grid;grid-template-columns:1fr 1fr;gap:16px}
+.sheet .cc{background:var(--titlebar);border-radius:14px;padding:16px;box-shadow:0 0 0 1px var(--hair)}
+.spec{display:grid;grid-template-columns:120px 1fr;gap:10px 14px;align-items:center}
+.spec > .k{font-size:11px;font-weight:500;color:var(--text-secondary)}
+.spec > .v{display:flex;flex-wrap:wrap;gap:8px;align-items:center;min-width:0}
+.spec .tab{flex:0 0 180px}
+.spec .tab.pinned{flex:0 0 36px}
+.tokens{width:100%;border-collapse:collapse;font-size:12px;background:#fff;border-radius:12px;overflow:hidden;box-shadow:0 0 0 1px var(--doc-hair)}
+.tokens th,.tokens td{text-align:left;padding:6px 10px;border-top:1px solid var(--doc-hair);vertical-align:middle}
+.tokens th{background:#f6f7f9;font-weight:600;border-top:0}
+.tokens td code{background:none;padding:0}
+.sw{display:inline-block;width:14px;height:14px;border-radius:4px;vertical-align:-3px;margin-right:6px;box-shadow:inset 0 0 0 1px rgba(0,0,0,.18)}
+.pass{color:#1a7f37;font-weight:600}.fail{color:#c01c28;font-weight:600}
+</style>
+</head>
+<body data-motion="smooth">
+
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <!-- One line-icon set: 24 px grid, 1.7 px stroke, round caps and joins (the shell's set plus browser glyphs). -->
+  <symbol id="i-back" viewBox="0 0 24 24"><path d="M19 12H5M11 6l-6 6 6 6"/></symbol>
+  <symbol id="i-forward" viewBox="0 0 24 24"><path d="M5 12h14M13 6l6 6-6 6"/></symbol>
+  <symbol id="i-reload" viewBox="0 0 24 24"><path d="M19.5 12a7.5 7.5 0 1 1-2.2-5.3M19.5 4.5v4h-4"/></symbol>
+  <symbol id="i-x" viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></symbol>
+  <symbol id="i-plus" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></symbol>
+  <symbol id="i-minus" viewBox="0 0 24 24"><path d="M5 12h14"/></symbol>
+  <symbol id="i-star" viewBox="0 0 24 24"><path d="M12 3.8l2.5 5.2 5.7.8-4.1 4 1 5.7L12 16.8l-5.1 2.7 1-5.7-4.1-4 5.7-.8z"/></symbol>
+  <symbol id="i-download" viewBox="0 0 24 24"><path d="M12 3.5v11M7.5 10.5l4.5 4.5 4.5-4.5M4.5 20h15"/></symbol>
+  <symbol id="i-menu" viewBox="0 0 24 24"><path d="M4.5 7h15M4.5 12h15M4.5 17h15"/></symbol>
+  <symbol id="i-lock" viewBox="0 0 24 24"><path d="M7.5 11h9a2.5 2.5 0 0 1 2.5 2.5v4.5a2.5 2.5 0 0 1-2.5 2.5h-9A2.5 2.5 0 0 1 5 18v-4.5A2.5 2.5 0 0 1 7.5 11zM8 11V8a4 4 0 0 1 8 0v3"/></symbol>
+  <symbol id="i-warning" viewBox="0 0 24 24"><path d="M12 4l9 16H3zM12 10v4M12 17h.01"/></symbol>
+  <symbol id="i-info" viewBox="0 0 24 24"><path d="M3 12a9 9 0 1 0 18 0a9 9 0 1 0-18 0zM12 11v5M12 8h.01"/></symbol>
+  <symbol id="i-search" viewBox="0 0 24 24"><path d="M4.5 11a6.5 6.5 0 1 0 13 0a6.5 6.5 0 1 0-13 0zM20 20l-4.2-4.2"/></symbol>
+  <symbol id="i-spark" viewBox="0 0 24 24"><path d="M12 3.5l1.9 5.1 5.1 1.9-5.1 1.9L12 17.5l-1.9-5.1L5 10.5l5.1-1.9zM18.5 15.5l.7 1.8 1.8.7-1.8.7-.7 1.8-.7-1.8-1.8-.7 1.8-.7z"/></symbol>
+  <symbol id="i-folder" viewBox="0 0 24 24"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></symbol>
+  <symbol id="i-file" viewBox="0 0 24 24"><path d="M7 3.5h6.5L18 8v11a1.5 1.5 0 0 1-1.5 1.5h-9.5A1.5 1.5 0 0 1 5.5 19V5A1.5 1.5 0 0 1 7 3.5zM13 3.5V8.5h5"/></symbol>
+  <symbol id="i-chevd" viewBox="0 0 24 24"><path d="M6 9l6 6 6-6"/></symbol>
+  <symbol id="i-chevu" viewBox="0 0 24 24"><path d="M6 15l6-6 6 6"/></symbol>
+  <symbol id="i-chevr" viewBox="0 0 24 24"><path d="M9 6l6 6-6 6"/></symbol>
+  <symbol id="i-eyeoff" viewBox="0 0 24 24"><path d="M3.5 12S6.5 6.5 12 6.5c1.6 0 3 .4 4.2 1.1M20.5 12s-3 5.5-8.5 5.5c-1.6 0-3-.4-4.2-1.1M9.9 9.9a3 3 0 0 0 4.2 4.2M4 4l16 16"/></symbol>
+  <symbol id="i-mic" viewBox="0 0 24 24"><path d="M9 6a3 3 0 0 1 6 0v5a3 3 0 0 1-6 0zM5.5 11a6.5 6.5 0 0 0 13 0M12 17.5V21"/></symbol>
+  <symbol id="i-camera" viewBox="0 0 24 24"><path d="M4.5 7h9a2 2 0 0 1 2 2v6a2 2 0 0 1-2 2h-9a2 2 0 0 1-2-2V9a2 2 0 0 1 2-2zM15.5 10.5l5-3v9l-5-3"/></symbol>
+  <symbol id="i-pin" viewBox="0 0 24 24"><path d="M12 21s-6.5-5.6-6.5-11a6.5 6.5 0 0 1 13 0c0 5.4-6.5 11-6.5 11zM10 10a2 2 0 1 0 4 0a2 2 0 1 0-4 0z"/></symbol>
+  <symbol id="i-bell" viewBox="0 0 24 24"><path d="M18 8.5a6 6 0 1 0-12 0c0 6.5-2.5 8.5-2.5 8.5h17S18 15 18 8.5M10.3 20.5a2 2 0 0 0 3.4 0"/></symbol>
+  <symbol id="i-shield" viewBox="0 0 24 24"><path d="M12 3l8 3v6c0 5-3.5 8-8 9-4.5-1-8-4-8-9V6z"/></symbol>
+  <symbol id="i-shieldx" viewBox="0 0 24 24"><path d="M12 3l8 3v6c0 5-3.5 8-8 9-4.5-1-8-4-8-9V6zM9.5 9.5l5 5M14.5 9.5l-5 5"/></symbol>
+  <symbol id="i-globe" viewBox="0 0 24 24"><path d="M3 12a9 9 0 1 0 18 0a9 9 0 1 0-18 0zM3 12h18M12 3c3 3.2 3 14.8 0 18M12 3c-3 3.2-3 14.8 0 18"/></symbol>
+  <symbol id="i-wifioff" viewBox="0 0 24 24"><path d="M2.5 9a14 14 0 0 1 6-3.3M13.5 5.6A14 14 0 0 1 21.5 9M5.5 12.5a9.5 9.5 0 0 1 3.5-2.2M15.5 10.6a9.5 9.5 0 0 1 3 1.9M9 16a4.5 4.5 0 0 1 6 0M12 19.5h.01M3 3l18 18"/></symbol>
+  <symbol id="i-speaker" viewBox="0 0 24 24"><path d="M11 5L6 9H3v6h3l5 4zM15.5 8.5a5 5 0 0 1 0 7M18.5 6a8.5 8.5 0 0 1 0 12"/></symbol>
+  <symbol id="i-mute" viewBox="0 0 24 24"><path d="M11 5L6 9H3v6h3l5 4zM16 9.5l5 5M21 9.5l-5 5"/></symbol>
+  <symbol id="i-alert" viewBox="0 0 24 24"><path d="M3 12a9 9 0 1 0 18 0a9 9 0 1 0-18 0zM12 7.5v5.5M12 16.5h.01"/></symbol>
+  <symbol id="i-clock" viewBox="0 0 24 24"><path d="M3 12a9 9 0 1 0 18 0a9 9 0 1 0-18 0zM12 7v5l3 2"/></symbol>
+  <symbol id="i-bookmark" viewBox="0 0 24 24"><path d="M6.5 3.5h11v17L12 16.5l-5.5 4z"/></symbol>
+  <symbol id="i-window" viewBox="0 0 24 24"><path d="M4.5 4h15a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2h-15a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2zM2.5 8.5h19"/></symbol>
+  <symbol id="i-fullscreen" viewBox="0 0 24 24"><path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5"/></symbol>
+  <symbol id="i-code" viewBox="0 0 24 24"><path d="M9 7l-5 5 5 5M15 7l5 5-5 5"/></symbol>
+  <symbol id="i-gear" viewBox="0 0 24 24"><path d="M9 12a3 3 0 1 0 6 0a3 3 0 1 0-6 0zM12 3v2.5M12 18.5V21M3 12h2.5M18.5 12H21M5.6 5.6l1.8 1.8M16.6 16.6l1.8 1.8M5.6 18.4l1.8-1.8M16.6 7.4l1.8-1.8"/></symbol>
+  <symbol id="i-power" viewBox="0 0 24 24"><path d="M12 3v8M7 6.5a7 7 0 1 0 10 0"/></symbol>
+  <symbol id="i-agent" viewBox="0 0 24 24"><path d="M8 8h8a3 3 0 0 1 3 3v5a3 3 0 0 1-3 3H8a3 3 0 0 1-3-3v-5a3 3 0 0 1 3-3zM12 4.5V8M9.5 13v1M14.5 13v1"/></symbol>
+  <symbol id="i-list" viewBox="0 0 24 24"><path d="M9 6.5h11M9 12h11M9 17.5h11M4.5 6.5h.01M4.5 12h.01M4.5 17.5h.01"/></symbol>
+  <symbol id="i-book" viewBox="0 0 24 24"><path d="M4 5.5A1.5 1.5 0 0 1 5.5 4H11v16H5.5A1.5 1.5 0 0 1 4 18.5zM20 5.5A1.5 1.5 0 0 0 18.5 4H13v16h5.5a1.5 1.5 0 0 0 1.5-1.5z"/></symbol>
+  <symbol id="i-columns" viewBox="0 0 24 24"><path d="M4.5 4h15a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2h-15a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2zM12 4v16"/></symbol>
+  <symbol id="i-copy" viewBox="0 0 24 24"><path d="M9.5 9h9a1.5 1.5 0 0 1 1.5 1.5v9a1.5 1.5 0 0 1-1.5 1.5h-9A1.5 1.5 0 0 1 8 19.5v-9A1.5 1.5 0 0 1 9.5 9zM16 9V5.5A1.5 1.5 0 0 0 14.5 4h-9A1.5 1.5 0 0 0 4 5.5v9A1.5 1.5 0 0 0 5.5 16H8"/></symbol>
+  <symbol id="i-pause" viewBox="0 0 24 24"><path d="M8.5 5.5v13M15.5 5.5v13"/></symbol>
+  <symbol id="i-tabs" viewBox="0 0 24 24"><path d="M4.5 5h15a2 2 0 0 1 2 2v11a2 2 0 0 1-2 2h-15a2 2 0 0 1-2-2V7a2 2 0 0 1 2-2zM8.5 5v15"/></symbol>
+  <symbol id="i-cloud" viewBox="0 0 24 24"><path d="M7 18.5a4.5 4.5 0 0 1-.6-9 6 6 0 0 1 11.4 1.6A3.8 3.8 0 0 1 17.2 18.5z"/></symbol>
+  <symbol id="i-trash" viewBox="0 0 24 24"><path d="M4.5 7h15M9.5 7V4.5h5V7M6.5 7l1 13h9l1-13"/></symbol>
+  <symbol id="i-puzzle" viewBox="0 0 24 24"><path d="M10 4.5a2 2 0 0 1 4 0V6h4v4h-1.5a2 2 0 0 0 0 4H18v4.5h-4.5V17a2 2 0 0 0-4 0v1.5H5V14h1.5a2 2 0 0 0 0-4H5V6h5z"/></symbol>
+  <symbol id="i-sidebar" viewBox="0 0 24 24"><path d="M4.5 4h15a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2h-15a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2zM9 4v16"/></symbol>
+</svg>
+
+<div class="doc">
+  <h1>CottonCandy · UI</h1>
+  <p class="lead">The GraceOS browser, drawn with the Grace Candyland tokens. Every frame on this page comes from one template and the same tokens, so the controls below change all of them at once.
+    The live window is interactive: click tabs, the address bar, the site icon, Downloads, the menu and the sparkle, or press <kbd>Ctrl</kbd>+<kbd>F</kbd> or <kbd>Esc</kbd> inside it.
+    Spec: <code>docs/design/2026-10-20-cottoncandy-ui.md</code>. Favicons are placeholders: the browser shows each site's real icon.</p>
+
+  <div class="controls" id="controls">
+    <span class="ctl">Theme <span class="seg" data-ctl="theme"><button data-v="dark" aria-pressed="true">Dark</button><button data-v="light">Light</button></span></span>
+    <span class="ctl">Accent <span class="swatches" id="swatches"></span></span>
+    <span class="ctl">Corners <input type="range" min="0" max="22" value="12" data-ctl="radius" aria-label="Corner radius"><output>12 px</output></span>
+    <span class="ctl">Gap <input type="range" min="0" max="24" value="10" data-ctl="gap" aria-label="Gap"><output>10 px</output></span>
+    <span class="ctl">Blur <span class="seg" data-ctl="blur"><button data-v="on" aria-pressed="true">On</button><button data-v="off">Off</button></span></span>
+    <span class="ctl">Motion <span class="seg" data-ctl="motion"><button data-v="off">Off</button><button data-v="calm">Calm</button><button data-v="smooth" aria-pressed="true">Smooth</button><button data-v="snappy">Snappy</button></span></span>
+    <span class="ctl">AI <span class="seg" data-ctl="ai"><button data-v="on" aria-pressed="true">On</button><button data-v="off">Off</button></span></span>
+    <span class="ctl">Header <span class="seg" data-ctl="header"><button data-v="two" aria-pressed="true">Two rows</button><button data-v="compact">Compact</button><button data-v="vertical">Vertical tabs</button></span></span>
+    <span class="ctl">Window <span class="seg" data-ctl="layout"><button data-v="floating" aria-pressed="true">Floating</button><button data-v="tiled">Tiled</button></span></span>
+    <span class="ctl">Bookmarks bar <span class="seg" data-ctl="bookmarks"><button data-v="off" aria-pressed="true">Hidden</button><button data-v="on">Shown</button></span></span>
+    <span class="ctl"><span class="seg"><button id="simulate-perm">Simulate a mic request</button></span></span>
+  </div>
+
+  <h2>1 · Live window</h2>
+  <p class="lead">Two-row header: traffic lights, tabs, the new-tab button and a tab list; then back, forward, reload, the address bar, the sparkle, Downloads and the menu. Switch Window to Tiled to see it next to CandySole on the gap grid.</p>
+  <div id="live-stage"></div>
+
+  <h2>2 · Screens</h2>
+  <div class="grid2" id="screens"></div>
+
+  <h2>3 · Components and states</h2>
+  <p class="lead">Each component is shown in dark and light. Hover the live specimens to see their hover states.</p>
+  <div class="sheet" id="sheet"></div>
+
+  <h2>4 · Tokens</h2>
+  <p class="lead">These are the dark values from <code>shell/config/Theme.qml</code> and the proposed light values. The contrast column is computed live in this page by compositing each overlay onto the surface it sits on. <code>docs/design/contrast.py</code> computes the same numbers offline.</p>
+  <h3>Colors</h3>
+  <table class="tokens" id="tok-colors"></table>
+  <h3>Accents (the selected one is used everywhere above)</h3>
+  <table class="tokens" id="tok-accents"></table>
+  <h3>Contrast checks for the selected accent</h3>
+  <table class="tokens" id="tok-contrast"></table>
+</div>
+
+<script>
+"use strict";
+// ---------- Tokens ----------
+const ACCENTS = {
+  blue:   {base:"#3584e4", fill:"#2f75cb", fg:"#4b92e7", fgLight:"#2663a9", tint:"#20324d"},
+  teal:   {base:"#2190a4", fill:"#1d8092", fg:"#399cae", fgLight:"#186c78", tint:"#1c3540"},
+  green:  {base:"#3a944a", fill:"#348442", fg:"#50a05e", fgLight:"#2c713a", tint:"#21362e"},
+  yellow: {base:"#c88800", fill:"#9c6a00", fg:"#c88800", fgLight:"#845a00", tint:"#3e331f"},
+  orange: {base:"#ed5b00", fill:"#c74c00", fg:"#ee650f", fgLight:"#a94300", tint:"#452a1f"},
+  red:    {base:"#e62d42", fill:"#dd2b3f", fg:"#ec6271", fgLight:"#bd2337", tint:"#44212c"},
+  pink:   {base:"#d56199", fill:"#b55282", fg:"#d96ba0", fgLight:"#9b4670", tint:"#402b3e"},
+  purple: {base:"#9141ac", fill:"#9141ac", fg:"#b37bc6", fgLight:"#8e40a9", tint:"#332542"},
+  slate:  {base:"#6f8396", fill:"#657788", fg:"#8092a3", fgLight:"#536572", tint:"#2c323d"},
+};
+const COLORS = [
+  // [token, dark, light, use]
+  ["desktop","#121419","#f3f4f6","New tab page and error pages"],
+  ["window","#1c1e25","#ffffff","Web content frame, popover bodies"],
+  ["titlebar","#181a20","#ebecef","Tab strip, toolbar, find bar"],
+  ["sidebar","#17191f","#f0f1f4","Vertical tabs, AI panel, settings sidebar"],
+  ["panel","rgba(22,24,31,.82) / #17191f","rgba(250,250,251,.86) / #fafafb","Menus, popovers, address dropdown (blur / no blur)"],
+  ["hair","rgba(255,255,255,.08)","rgba(0,0,0,.08)","Every 1 px edge and divider"],
+  ["subtle","rgba(255,255,255,.05)","rgba(0,0,0,.06)","Divider under the chrome"],
+  ["card","rgba(255,255,255,.045)","rgba(0,0,0,.035)","Cards, shortcut hover"],
+  ["control","rgba(255,255,255,.065)","rgba(0,0,0,.05)","Address bar and field fill"],
+  ["controlStrong","rgba(255,255,255,.09)","rgba(0,0,0,.07)","Neutral buttons, field hover"],
+  ["controlHover","rgba(255,255,255,.12)","rgba(0,0,0,.08)","Hover on any control or tab"],
+  ["selected","rgba(255,255,255,.14)","rgba(0,0,0,.10)","Active tab, selected rows, pressed"],
+  ["track","rgba(255,255,255,.12)","rgba(0,0,0,.10)","Progress tracks"],
+  ["textStrong","#f1f2f6","#14161a","Active tab title, page titles"],
+  ["text","#e6e8ee","#1d1f24","Body, URL host"],
+  ["textControl","#d9dce5","#2b2f37","Button labels, toolbar icons"],
+  ["textSecondary","#8a90a0","#575d6a","Inactive tabs, URL path, placeholders, labels"],
+  ["textTertiary","#7d8392","#868b97","Disabled only (exempt from contrast rules)"],
+  ["success","#7ed99c","#1a7f37","Local AI dot, done states"],
+  ["error","#ff8a8a","#c01c28","Not secure, certificate and download errors"],
+];
+
+// ---------- State ----------
+const S = {theme:"dark", accent:"blue", radius:12, gap:10, blur:true, motion:"smooth", ai:true, header:"two", layout:"floating", bookmarks:false};
+const MOTION = {off:0, calm:1.45, smooth:1, snappy:.65};
+
+// ---------- Helpers ----------
+const I = (name, cls="") => `<svg class="i ${cls}" aria-hidden="true"><use href="#i-${name}"/></svg>`;
+const esc = s => String(s).replace(/[&<>"]/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+const SITES = {
+  arch:   {letter:"A", color:"#1793d1", label:"Arch Wiki", host:"wiki.archlinux.org", path:"/title/Hyprland", title:"Hyprland – ArchWiki"},
+  gh:     {letter:"G", color:"#2f3338", label:"GitHub", host:"github.com", path:"/itsHarshDabas/GraceOS", title:"itsHarshDabas/GraceOS"},
+  py:     {letter:"P", color:"#3570a5", label:"Python", host:"docs.python.org", path:"/3/library/sqlite3.html", title:"sqlite3 — Python 3 docs"},
+  music:  {letter:"M", color:"#7a5af5", label:"Radio", host:"radio.example.org", path:"/lofi", title:"Lo-fi to tile windows to"},
+  meet:   {letter:"V", color:"#0f8a6a", label:"Meet", host:"meet.example.org", path:"/standup", title:"Standup call"},
+  qt:     {letter:"Q", color:"#2d9a4b", label:"Qt Docs", host:"doc.qt.io", path:"/qt-6/qtwebengine-index.html", title:"Qt WebEngine 6"},
+  mdn:    {letter:"M", color:"#1b1b1b", label:"MDN", host:"developer.mozilla.org", path:"/en-US/docs/Web/CSS/color-mix", title:"color-mix() – CSS | MDN"},
+  hf:     {letter:"H", color:"#e8a317", label:"Hugging Face", host:"huggingface.co", path:"/models", title:"Models – Hugging Face"},
+  aur:    {letter:"U", color:"#4a6ea9", label:"AUR", host:"aur.archlinux.org", path:"/packages", title:"AUR (en) – Packages"},
+  ollama: {letter:"O", color:"#3b3f46", label:"Ollama", host:"ollama.com", path:"/library", title:"Ollama library"},
+  grace:  {letter:"g", color:"#ec6271", label:"Candyland", host:"github.com", path:"/itsHarshDabas/grace-candyland", title:"grace-candyland"},
+};
+const fav = (key, big=false) => { const s = SITES[key]; return `<span class="fav${big?" big":""}" style="--fc:${s.color}" aria-hidden="true">${s.letter}</span>`; };
+const spinner = `<svg class="spin" viewBox="0 0 16 16" aria-label="Loading"><circle cx="8" cy="8" r="6" fill="none" stroke="var(--track)" stroke-width="1.7"/><path d="M8 2a6 6 0 0 1 6 6" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/></svg>`;
+
+// ---------- Frames: each has an options object, rendered by browser() ----------
+let tabSeq = 100;
+const newTab = (site=null, extra={}) => ({id:++tabSeq, site, page: site ? "site" : "ntp", ...extra});
+const FRAMES = {};
+
+function liveFrame() {
+  return {
+    live:true, theme:null, ai:null, header:null,
+    tabs:[
+      newTab("arch"),
+      newTab("gh", {attention:true}),
+      newTab("music", {audio:"playing"}),
+      newTab("py", {loading:true}),
+      newTab(null),
+    ],
+    active:0, panel:null, popover:null, editing:false, sel:0, query:"", find:false, findQ:"gaps", perm:false, loading:false,
+  };
+}
+
+function browser(id) {
+  const o = FRAMES[id];
+  const theme = o.theme || S.theme, ai = o.ai ?? S.ai, header = o.header || S.header;
+  const tabs = o.tabs, tab = tabs[o.active] || tabs[0];
+  const site = tab.site ? SITES[tab.site] : null;
+  const isNtp = !site && tab.page === "ntp";
+  const crowded = tabs.length > 7 || header === "compact";  // compact: inactive tabs show their icon only
+
+  const tl = `<span class="tl" role="group" aria-label="Window"><button class="c" aria-label="Close window"><svg viewBox="0 0 12 12"><path d="M3.5 3.5l5 5M8.5 3.5l-5 5"/></svg></button><button class="m" aria-label="Minimize"><svg viewBox="0 0 12 12"><path d="M3 6h6"/></svg></button><button class="x" aria-label="Maximize"><svg viewBox="0 0 12 12"><path d="M6 3v6M3 6h6"/></svg></button></span>`;
+
+  const tabHTML = (t, i, vertical=false) => {
+    const s = t.site ? SITES[t.site] : null;
+    const title = t.crashed ? "Page crashed" : (s ? s.title : (t.page === "settings" ? "Settings" : t.page === "error" ? "Can’t reach site" : "New Tab"));
+    const lead = t.loading ? spinner
+      : t.crashed ? `<span class="fav-crash">${I("alert")}</span>`
+      : s ? fav(t.site)
+      : `<span class="fav internal">${I(t.page === "settings" ? "gear" : "search", "s14")}</span>`;
+    const state = t.audio === "playing" ? `<span class="st" title="Playing audio">${I("speaker","s14")}</span>`
+      : t.audio === "muted" ? `<span class="st muted" title="Muted">${I("mute","s14")}</span>`
+      : t.recording ? `<span class="st" title="Using your microphone"><span class="rec"></span></span>` : "";
+    const cls = ["tab", i === o.active ? "active" : "", t.pinned ? "pinned" : "", t.crashed ? "crashed" : "", t.dragging ? "dragging" : ""].join(" ");
+    return `<div class="${cls}" role="tab" aria-selected="${i===o.active}" tabindex="${i===o.active?0:-1}" data-act="tab" data-i="${i}" title="${esc(title)}">
+      ${lead}${t.attention ? '<span class="attn" title="Needs attention"></span>' : ""}<span class="t">${esc(title)}</span>${state}
+      <button class="x" data-act="close-tab" data-i="${i}" aria-label="Close tab">${I("x","s14")}</button></div>`;
+  };
+
+  // Address bar
+  let addr;
+  if (o.editing) {
+    const val = o.query;
+    addr = `<div class="addr focus" data-act="noop">
+      <span class="site">${I(ai && !site ? "spark" : "search","s14")}</span>
+      <input data-role="addr" value="${esc(val)}" aria-label="Search or enter address" placeholder="Search or enter address" autocomplete="off" spellcheck="false">
+      ${dropdown(o, ai, val)}</div>`;
+  } else {
+    const secure = site && !tab.insecure;
+    const siteIcon = !site ? I("search","s14") : secure ? I("lock","s14") : I("warning","s14");
+    const urlHTML = !site
+      ? `<span class="ph">${tab.page === "settings" ? `<span class="host">cottoncandy://settings</span>` : "Search or enter address"}</span>`
+      : `${tab.insecure ? `<span class="notsecure">Not secure</span>` : ""}<span class="host">${esc(site.host)}</span><span class="rest">${esc(site.path)}</span>`;
+    addr = `<div class="addr">
+      <button class="site ${tab.insecure ? "warn" : ""} ${o.popover==="siteinfo"?"on":""}" data-act="siteinfo" aria-label="${site ? (secure ? "Connection is secure. Site settings" : "Not secure. Site settings") : "Search"}" aria-haspopup="dialog">${siteIcon}</button>
+      <span class="url" data-act="edit">${urlHTML}</span>
+      ${site ? `<button class="ib sm" data-act="bookmark" aria-label="${tab.bookmarked ? "Remove bookmark" : "Bookmark this page"}" style="${tab.bookmarked ? "color:var(--a-text)" : ""}">${tab.bookmarked ? `<svg class="i s14" style="fill:currentColor"><use href="#i-star"/></svg>` : I("star","s14")}</button>` : ""}
+      ${o.popover === "siteinfo" ? siteInfo(site, tab) : ""}${o.perm && site ? permCard(site) : ""}</div>`;
+  }
+
+  const loading = tab.loading || o.loading;
+  const navBtns = `<button class="ib" aria-label="Back" ${o.active===0&&!o.live?"disabled":""}>${I("back")}</button>
+    <button class="ib" aria-label="Forward" disabled>${I("forward")}</button>
+    <button class="ib" data-act="reload" aria-label="${loading ? "Stop" : "Reload"}">${I(loading ? "x" : "reload")}</button>`;
+  const dlP = o.dlProgress ?? 62;
+  const tail = `${ai ? `<button class="ib ai ${o.panel==="ai"?"on":""}" data-act="ai" aria-label="Grace" aria-pressed="${o.panel==="ai"}">${I("spark")}</button>` : ""}
+    <button class="ib dl ${o.popover==="downloads"?"on":""}" data-act="downloads" aria-label="Downloads, 1 in progress" aria-haspopup="dialog"><span class="ring" style="--p:${dlP}%"></span>${I("download")}</button>
+    <button class="ib ${o.popover==="menu"?"on":""}" data-act="menu" aria-label="Main menu" aria-haspopup="menu">${I("menu")}</button>`;
+  const privateBadge = o.private ? `<span class="private" title="History, cookies and site data are deleted when this window closes">${I("eyeoff","s14")}Private</span>` : "";
+
+  let chrome;
+  const tabsStrip = `<div class="tabs ${crowded ? "crowded" : ""}" role="tablist" aria-label="Tabs">${tabs.map((t,i)=>tabHTML(t,i)).join("")}</div>
+      <button class="ib" data-act="new-tab" aria-label="New tab">${I("plus")}</button>`;
+  if (header === "compact") {
+    chrome = `<div class="chrome compact"><div class="row toolbar">${tl}${navBtns}<div style="flex:0 1 38%;min-width:200px;display:flex">${addr}</div>
+      ${tabsStrip}<span class="spacer"></span>${privateBadge}${tail}</div>
+      ${loading ? `<div class="progress ${o.loading?"run":""}"><i></i></div>` : ""}${popovers(o, ai)}</div>`;
+  } else if (header === "vertical") {
+    chrome = `<div class="chrome compact"><div class="row toolbar">${tl}<button class="ib" aria-label="Hide tabs sidebar">${I("sidebar")}</button>${navBtns}${addr}${privateBadge}${tail}</div>
+      ${loading ? `<div class="progress ${o.loading?"run":""}"><i></i></div>` : ""}${popovers(o, ai)}</div>`;
+  } else {
+    chrome = `<div class="chrome"><div class="row tabsrow">${tl}${tabsStrip}<span class="spacer"></span>${privateBadge}
+        <button class="ib" aria-label="All tabs" aria-haspopup="menu">${I("chevd")}</button></div>
+      <div class="row toolbar">${navBtns}${addr}${tail}</div>
+      ${(o.bookmarks ?? S.bookmarks) ? bmBar() : ""}
+      ${loading ? `<div class="progress ${o.loading?"run":""}"><i></i></div>` : ""}${popovers(o, ai)}</div>`;
+  }
+
+  const find = o.find ? `<div class="findbar" role="search">
+      <label class="field focus" style="width:280px">${I("search","s14")}<input data-role="find" value="${esc(o.findQ)}" aria-label="Find in page"></label>
+      <span class="count ${o.findQ && o.findQ.toLowerCase()==="zzz" ? "none" : ""}" aria-live="polite">${!o.findQ ? "" : o.findQ.toLowerCase()==="zzz" ? "No matches" : "2 of 14"}</span>
+      <button class="ib sm" aria-label="Previous match">${I("chevu","s14")}</button><button class="ib sm" aria-label="Next match">${I("chevd","s14")}</button>
+      <button class="chk" aria-pressed="false">Match case</button><span class="spacer"></span>
+      <button class="ib sm" data-act="close-find" aria-label="Close find bar">${I("x","s14")}</button></div>` : "";
+
+  let page;
+  if (tab.page === "ntp") page = ntp(o, ai);
+  else if (tab.page === "error") page = errorPage(o, ai, tab);
+  else if (tab.page === "settings") page = settingsPage(ai);
+  else page = sitePage(site, o.find ? o.findQ : "");
+
+  const rail = header === "vertical" ? `<nav class="rail" aria-label="Tabs"><button class="newtab" data-act="new-tab">${I("plus","s14")}New tab</button>
+      ${tabs.filter(t=>t.pinned).length ? `<div class="grp">Pinned</div>` : ""}
+      ${tabs.map((t,i)=>tabHTML(t,i,true)).join("")}</nav>` : "";
+  const panel = ai && o.panel === "ai" ? aiPanel(o, site) : "";
+
+  return `<div class="cc win ${o.inactive ? "inactive" : ""} ${o.size||""}" data-theme="${theme}" data-frame="${id}" tabindex="-1" role="application" aria-label="CottonCandy">
+    ${chrome}${find}<div class="body">${rail}<main class="content">${page}</main>${panel}</div></div>`;
+}
+
+function bmBar() {
+  return `<div class="bmbar">${["arch","gh","py","qt","hf","aur"].map(k=>`<button class="bm">${fav(k)}${esc(SITES[k].title.split(" – ")[0].split(" — ")[0])}</button>`).join("")}</div>`;
+}
+
+function dropdown(o, ai, q) {
+  const rows = [];
+  const add = (group, items) => { if (items.length) rows.push({group}, ...items); };
+  const m = q.trim().toLowerCase();
+  const hit = s => !m || (s.title + s.host + s.path).toLowerCase().includes(m);
+  const mk = (text) => m ? esc(text).replace(new RegExp("(" + m.replace(/[.*+?^${}()|[\]\\]/g,"\\$&") + ")","i"), "<mark>$1</mark>") : esc(text);
+  add("Open tabs", o.tabs.filter(t=>t.site && hit(SITES[t.site])).slice(0,2).map(t=>({icon:fav(t.site), title:SITES[t.site].title, sub:SITES[t.site].host, tail:'<kbd>Switch to tab</kbd>'})));
+  add("Bookmarks", ["qt","mdn"].filter(k=>hit(SITES[k])).map(k=>({icon:fav(k), title:SITES[k].title, sub:SITES[k].host + SITES[k].path})));
+  add("History", ["aur","hf","ollama"].filter(k=>hit(SITES[k])).map(k=>({icon:fav(k), title:SITES[k].title, sub:SITES[k].host + SITES[k].path})));
+  const search = [{icon:`<span class="ic">${I("search")}</span>`, title: m ? `${esc(q)}` : "Type to search", sub: "DuckDuckGo", raw:true}];
+  if (ai && m) search.push({icon:`<span class="ic ai">${I("spark")}</span>`, title:`Ask Grace about “${esc(q)}”`, sub:"Local AI · on this device", raw:true});
+  add("Search", search);
+  let n = -1;
+  const items = rows.map(r => {
+    if (r.group) return `<div class="grp">${r.group}</div>`;
+    n++;
+    return `<div class="li ${n===o.sel?"sel":""}" role="option" aria-selected="${n===o.sel}">${r.icon}<span class="main"><span>${r.raw ? r.title : mk(r.title)}</span>
+      <span class="sub"> · ${r.raw ? r.sub : mk(r.sub)}</span></span>${r.tail ? `<span class="tail">${r.tail}</span>` : ""}</div>`;
+  });
+  o._count = n + 1;
+  return `<div class="pop dropdown" role="listbox" aria-label="Suggestions">${items.join("")}</div>`;
+}
+
+function siteInfo(site, tab) {
+  if (!site) return "";
+  return `<div class="pop perm siteinfo" role="dialog" aria-label="Site information">
+    <div class="head"><span class="badge">${I(tab.insecure ? "warning" : "lock","s14")}</span><div><b>${esc(site.host)}</b>
+      <p>${tab.insecure ? "Not secure: this page is sent unencrypted. Don’t enter passwords or card numbers." : "Connection is secure. The certificate is valid."}</p></div></div>
+    <div class="grp" style="padding:12px 0 4px">Permissions for this site</div>
+    <div class="li dense">${I("camera","s14")}<span class="main">Camera</span><span class="tail">Ask</span></div>
+    <div class="li dense">${I("mic","s14")}<span class="main">Microphone</span><span class="tail">Ask</span></div>
+    <div class="li dense">${I("bell","s14")}<span class="main">Notifications</span><span class="tail">Blocked</span></div>
+    <hr><div class="li dense">${I("trash","s14")}<span class="main">Clear cookies and site data…</span></div></div>`;
+}
+
+function permCard(site) {
+  return `<div class="pop perm siteinfo" role="alertdialog" aria-label="Permission request">
+    <div class="head"><span class="badge">${I("mic","s14")}</span><div><b>${esc(site.host)} wants to use your microphone</b>
+      <p>Only for this tab. It stays off until you choose.</p></div></div>
+    <div class="details" id="perm-details" hidden><span>Device</span><span>Built-in microphone (analog stereo)</span><span>Asked by</span><span class="mono">https://${esc(site.host)}</span><span>Lasts</span><span>Until this tab closes</span></div>
+    <div class="btns"><button class="pill primary" data-act="perm-allow">Allow once</button><button class="pill" data-act="perm-deny">Deny</button><button class="pill ghost" data-act="perm-details" aria-expanded="false">Details</button></div></div>`;
+}
+
+function popovers(o, ai) {
+  if (o.popover === "menu") {
+    const row = (icon, label, kbd="", cls="") => `<button class="li dense" role="menuitem"><span class="ic ${cls}">${I(icon)}</span><span class="main">${label}</span>${kbd ? `<span class="tail"><kbd>${kbd}</kbd></span>` : ""}</button>`;
+    return `<div class="pop menu" role="menu" aria-label="Main menu">
+      ${row("plus","New tab","Ctrl T")}${row("window","New window","Ctrl N")}${row("eyeoff","New private window","Ctrl Shift N")}<hr>
+      <div class="zoom"><span class="ic" style="color:var(--text-secondary)">${I("search")}</span><span class="lbl">Zoom</span>
+        <button class="ib sm" aria-label="Zoom out">${I("minus","s14")}</button><span class="val">100%</span><button class="ib sm" aria-label="Zoom in">${I("plus","s14")}</button>
+        <button class="ib sm" aria-label="Full screen">${I("fullscreen","s14")}</button></div><hr>
+      ${row("clock","History","Ctrl H")}${row("bookmark","Bookmarks","Ctrl Shift O")}${row("download","Downloads","Ctrl Shift Y")}${row("search","Find in page","Ctrl F")}<hr>
+      ${ai ? row("spark","Grace","Ctrl Shift G","ai") : ""}${row("code","Developer tools","F12")}${row("gear","Settings")}<hr>
+      ${row("power","Quit","Ctrl Q")}</div>`;
+  }
+  if (o.popover === "downloads") {
+    return `<div class="pop dls" role="dialog" aria-label="Downloads">
+      <div style="display:flex;align-items:center;padding:4px 4px 6px 10px"><b style="flex:1;font-weight:600;color:var(--text-strong)">Downloads</b><button class="pill ghost">${I("folder","s14")}Open folder</button></div>
+      <div class="dl-row"><span class="fi">${I("file","s14")}</span><div class="meta"><div class="name">qwen2.5-coder-7b-q4_k_m.gguf</div><div class="bar"><i style="width:62%"></i></div><div class="stat">2.9 GB of 4.7 GB · 18 MB/s · 1 min left</div></div><button class="ib sm" aria-label="Pause">${I("pause","s14")}</button><button class="ib sm" aria-label="Cancel">${I("x","s14")}</button></div>
+      <div class="dl-row"><span class="fi">${I("file","s14")}</span><div class="meta"><div class="name">archlinux-2026.10.01-x86_64.iso</div><div class="stat">Done · 1.2 GB</div></div><button class="ib sm" aria-label="Show in folder">${I("folder","s14")}</button></div>
+      <div class="dl-row"><span class="fi">${I("file","s14")}</span><div class="meta"><div class="name">report.pdf</div><div class="stat failed">Failed: network error</div></div><button class="ib sm" aria-label="Retry">${I("reload","s14")}</button></div></div>`;
+  }
+  return "";
+}
+
+function sitePage(site, q) {
+  // Highlight matches in text only, never inside tags.
+  const re = q ? new RegExp(q.replace(/[.*+?^${}()|[\]\\]/g,"\\$&"), "gi") : null;
+  const hl = t => !re ? t : t.replace(/>([^<]+)</g, (m, text) => ">" + text.replace(re, x => `<mark>${x}</mark>`) + "<");
+  const body = hl(`<h1>${esc(site ? site.title.split(" – ")[0] : "")}</h1>
+    <p class="muted">From the wiki · last edited 3 days ago</p>
+    <p>Hyprland is a dynamic tiling Wayland compositor with smooth animations, rounded corners and blur. Gaps between windows are set with <code>general:gaps_in</code> and <code>gaps_out</code>.</p>
+    <h2>Configuration</h2>
+    <p>Hyprland reads <a>~/.config/hypr/hyprland.conf</a>. GraceOS keeps its own settings in <a>~/.config/grace/desktop.conf</a> and loads yours last.</p>
+    <pre>general {
+    gaps_in = 5
+    gaps_out = 10
+    border_size = 1
+}</pre>
+    <h2>Tips</h2>
+    <p>Use equal inner and outer gaps for a calm grid. Window rules can float dialogs and keep pop-ups centered.</p>`);
+  const marked = body.replace("<mark>", '<mark class="cur">');
+  return `<div class="webpage"><div class="sitebar"><b>${esc(site ? site.host : "")}</b><span>Docs</span><span>Install</span><span>Community</span></div><div class="wrap">${q ? marked : body}</div></div>`;
+}
+
+function ntp(o, ai) {
+  const sc = ["gh","arch","py","qt","hf","ollama","aur","mdn"];
+  return `<div class="ntp">
+    <label class="ntp-field"><span class="lead ${ai?"ai":""}">${I(ai ? "spark" : "search", "s18")}</span>
+      <input placeholder="${ai ? "Search, enter address or ask Grace" : "Search or enter address"}" aria-label="Search or enter address"></label>
+    ${ai ? `<div class="ntp-hint"><span class="ai">${I("spark","s14")}</span>Ask Grace about… a page, an error, a doc. Press <kbd>Tab</kbd> to ask instead of search.</div>`
+         : `<div class="ntp-hint">Search with DuckDuckGo or type an address.</div>`}
+    ${o.private ? `<p class="ntp-note">${I("eyeoff","s14")}<br>This is a private window. History, cookies and site data are deleted when it closes. Downloads and bookmarks are kept.</p>` : `
+    <div class="shortcuts">${sc.map(k=>`<a class="sc" href="#" title="${esc(SITES[k].host)}">${fav(k,true)}<span>${esc(SITES[k].label)}</span></a>`).join("")}</div>
+    <div class="recent"><div class="grp">Recently closed</div>
+      <button class="li dense">${fav("mdn")}<span class="main">color-mix() – CSS | MDN</span><span class="tail">developer.mozilla.org</span></button>
+      <button class="li dense">${fav("ollama")}<span class="main">Ollama library</span><span class="tail">ollama.com</span></button></div>`}
+    ${ai && !o.private ? `<div class="ntp-foot"><span class="chip"><span class="dot"></span>Local AI · on this device</span></div>` : ""}</div>`;
+}
+
+function errorPage(o, ai, tab) {
+  if (tab.kind === "cert") {
+    return `<div class="err"><span class="big bad">${I("shieldx","s28")}</span><h1>This connection isn’t private</h1>
+      <p>bank.example.org sent a certificate that doesn’t match its name. Someone may be trying to read what you send.</p>
+      <span class="code">NET::ERR_CERT_COMMON_NAME_INVALID</span>
+      <div class="btns"><button class="pill primary lg">Go back</button><button class="pill lg">Details</button></div>
+      <p style="margin-top:12px;font-size:12px">CottonCandy never lets you continue past a bad certificate.</p></div>`;
+  }
+  return `<div class="err"><span class="big">${I("wifioff","s28")}</span><h1>You’re offline</h1>
+    <p>CottonCandy can’t reach wiki.archlinux.org. Check the network, then try again.</p>
+    <span class="code">ERR_INTERNET_DISCONNECTED</span>
+    <div class="btns"><button class="pill primary lg">Try again</button><button class="pill lg">Network settings</button></div>
+    ${ai ? `<button class="ask">${I("spark","s14")}Explain this error</button>` : ""}</div>`;
+}
+
+function settingsPage(ai) {
+  const it = (icon, label, sel=false) => `<button class="li dense ${sel?"sel":""}"><span class="ic">${I(icon)}</span><span class="main">${label}</span></button>`;
+  return `<div class="settings"><nav class="side" aria-label="Settings">
+    <label class="field">${I("search","s14")}<input placeholder="Search settings" aria-label="Search settings"></label>
+    ${it("globe","General")}${it("search","Search")}${it("tabs","Tabs")}
+    <div class="grp">Privacy</div>${it("shield","Privacy &amp; Security",true)}${it("camera","Site permissions")}${it("trash","Cookies &amp; site data")}
+    <div class="grp">Look</div>${it("sidebar","Appearance")}
+    <div class="grp">Intelligence</div>${it("spark","Grace")}
+    <div class="grp">Advanced</div>${it("download","Downloads")}${it("code","Developer")}${it("info","About")}</nav>
+    <div class="page"><h1>Privacy &amp; Security</h1><p class="lead">What CottonCandy keeps and sends. Nothing leaves this computer unless you ask.</p>
+      <div class="box">
+        <div class="r"><p>Search engine<small>Used for anything that isn’t an address</small></p><span class="drop">DuckDuckGo${I("chevd","s14")}</span></div>
+        <div class="r"><p>Search suggestions<small>Off: nothing is sent while you type</small></p><span class="toggle" role="switch" aria-checked="false" tabindex="0"></span></div>
+        <div class="r"><p>Block third-party cookies</p><span class="toggle" role="switch" aria-checked="true" tabindex="0"></span></div></div>
+      <div class="box">
+        <div class="r"><p>Certificate errors<small>Always stop; there is no way past a bad certificate</small></p><span style="color:var(--text-secondary);font-size:12px">Always on</span></div>
+        <div class="r"><p>Remember permission answers</p><span class="segc"><span class="on">This tab</span><span>Until quit</span><span>Always</span></span></div></div>
+      <div class="box">
+        <div class="r"><p>Grace in the browser<small>${ai ? "Local AI · on this device (CherryCola)" : "Off in GraceOS Settings → AI &amp; Models. Everything else works the same."}</small></p><span class="toggle" role="switch" aria-checked="${ai}" tabindex="0"></span></div>
+        <div class="r"><p>Clear browsing data…<small>History, cookies, cache and site data</small></p>${I("chevr","s14")}</div></div>
+    </div></div>`;
+}
+
+function aiPanel(o, site) {
+  return `<aside class="aip" aria-label="Grace">
+    <div class="aip-h"><span style="color:var(--a-text)">${I("spark")}</span><b>Grace</b><span class="spacer"></span><button class="ib sm" data-act="ai" aria-label="Close Grace">${I("x","s14")}</button></div>
+    <div class="aip-b">
+      <div class="where"><span class="chip"><span class="dot"></span>Local AI · on this device</span><span>Qwen2.5-Coder 7B</span></div>
+      <div>
+        <button class="li dense"><span class="ic">${I("list")}</span><span class="main">Summarize this page</span></button>
+        <button class="li dense"><span class="ic">${I("book")}</span><span class="main">Explain this doc</span></button>
+        <button class="li dense"><span class="ic">${I("columns")}</span><span class="main">Compare tabs…</span></button>
+        <button class="li dense"><span class="ic">${I("agent")}</span><span class="main">Send selection to an agent…</span></button>
+      </div>
+      <div class="card"><h4><span class="ai">${I("spark","s14")}</span>Summary of ${esc(site ? site.host : "this page")}</h4>
+        <ul><li>Hyprland is a tiling Wayland compositor with animations and blur.</li><li>Gaps come from <span class="mono">gaps_in</span> and <span class="mono">gaps_out</span>.</li><li>GraceOS loads your own config last.</li></ul>
+        <div class="foot"><button class="pill">${I("copy","s14")}Copy</button><button class="pill ghost">Ask a follow-up</button></div>
+        <p class="note">Made on this device from the page text. Text in pages can try to give instructions; Grace treats it as text and never acts on it.</p></div>
+      <div class="card perm" style="width:auto;padding:12px">
+        <div class="head"><span class="badge ai">${I("agent","s14")}</span><div><b>Send 1,240 characters to Claude Code?</b><p>The text you selected on ${esc(site ? site.host : "this page")}. Claude Code gets nothing else.</p></div></div>
+        <div class="btns"><button class="pill primary">Allow once</button><button class="pill">Deny</button><button class="pill ghost">Details</button></div></div>
+    </div></aside>`;
+}
+
+// ---------- Render ----------
+function render(id) {
+  const el = document.querySelector(`[data-mount="${id}"]`);
+  if (!el) return;
+  const had = document.activeElement && el.contains(document.activeElement) ? document.activeElement : null;
+  const key = had && had.dataset.act ? `[data-act="${had.dataset.act}"]${had.dataset.i ? `[data-i="${had.dataset.i}"]` : ""}` : null;
+  el.innerHTML = browser(id);
+  if (key) (el.querySelector(key) || el.querySelector(".win"))?.focus();
+  else if (had) el.querySelector(".win")?.focus();
+  const o = FRAMES[id];
+  if (o.editing) { const inp = el.querySelector('[data-role="addr"]'); inp.focus(); if (o._selectAll) { inp.select(); o._selectAll = false; } else inp.setSelectionRange(inp.value.length, inp.value.length); }
+  if (o.find && o._focusFind) { const f = el.querySelector('[data-role="find"]'); f.focus(); f.select(); o._focusFind = false; }
+}
+
+function renderLive() {
+  const stage = document.getElementById("live-stage");
+  const light = S.theme === "light";
+  stage.innerHTML = S.layout === "tiled"
+    ? `<div class="stage tiled ${light?"light":""}"><div data-mount="live"></div>
+        <div class="other"><div class="tl"><button class="c"></button><button class="m"></button><button class="x"></button></div>
+        <span style="color:#7ed99c">harsh@grace</span> <span style="color:#4b92e7">~/CottonCandy-Browser</span> $ make check<br>78 passed in 0.13s<br>desktop-file-validate: ok<br>$ <span style="opacity:.6">▍</span></div></div>`
+    : `<div class="stage ${light?"light":""}"><div data-mount="live" style="max-width:1180px;margin:0 auto"></div></div>`;
+  render("live");
+}
+
+const SCREENS = [
+  ["s-dark", "Browser · dark", "Reading a page; one tab loading, one playing audio, one needing attention.", {theme:"dark", tabs:[newTab("arch"), newTab("gh",{attention:true}), newTab("music",{audio:"playing"}), newTab("py",{loading:true}), newTab("qt")], active:0}],
+  ["s-light", "Browser · light", "The same page in the proposed light theme. Accent text and icons use fg-light.", {theme:"light", tabs:[newTab("arch",{bookmarked:true}), newTab("gh"), newTab("music",{audio:"muted"}), newTab("py"), newTab("qt")], active:0}],
+  ["s-ntp-dark", "New tab · dark", "Calm and centered: one field, real site icons, recently closed tabs. The glow is the accent tint.", {theme:"dark", tabs:[newTab("arch"), newTab(null)], active:1}],
+  ["s-ntp-light", "New tab · light", "Light mirror of the new tab page.", {theme:"light", tabs:[newTab("arch"), newTab(null)], active:1}],
+  ["s-aioff", "AI off · browser", "No sparkle in the toolbar, no Grace panel, no Grace in the menu. Nothing else changes.", {theme:"dark", ai:false, tabs:[newTab("arch"), newTab("gh"), newTab("py")], active:0, popover:"menu"}],
+  ["s-aioff-ntp", "AI off · new tab", "The field becomes plain search with a magnifier; the Local AI chip is gone.", {theme:"dark", ai:false, tabs:[newTab("gh"), newTab(null)], active:1}],
+  ["s-ai", "Grace panel (AI on)", "Opened from the sparkle. It names where the model runs. Sending to an agent uses the approval card.", {theme:"dark", tabs:[newTab("arch"), newTab("gh")], active:0, panel:"ai"}],
+  ["s-perm", "Permission request", "Anchored to the site icon, styled like the Grace approval card. It never allows by default.", {theme:"light", tabs:[newTab("meet",{recording:false}), newTab("gh")], active:0, perm:true}],
+  ["s-private", "Private window", "Same layout, marked with a neutral label. No color theme.", {theme:"dark", private:true, tabs:[newTab(null)], active:0}],
+  ["s-offline", "Offline page", "Error pages use the new tab page style. With AI on, “Explain this error” is one small link.", {theme:"dark", tabs:[newTab(null,{page:"error"})], active:0, size:"short"}],
+  ["s-cert", "Certificate error · light", "No way to continue past a bad certificate.", {theme:"light", tabs:[newTab(null,{page:"error", kind:"cert"})], active:0, size:"short"}],
+  ["s-settings", "Settings page", "The Grace Settings layout: grouped sidebar, 20 px title, 50 px rows in boxes.", {theme:"dark", tabs:[newTab(null,{page:"settings"})], active:0}],
+  ["s-compact", "Compact header · light", "Optional single row for wide windows (1000 px and up): traffic lights, navigation, address, then tabs with inactive ones as icons. Narrower windows fall back to two rows.", {theme:"light", header:"compact", tabs:[newTab("arch"), newTab("gh"), newTab("py")], active:0, size:"short"}],
+  ["s-vertical", "Vertical tabs", "For many tabs: a sidebar-colored rail; the header collapses to one row.", {theme:"dark", header:"vertical", tabs:[newTab("gh",{pinned:true}), newTab("arch"), newTab("py",{loading:true}), newTab("qt"), newTab("hf"), newTab("aur"), newTab("mdn"), newTab("ollama",{crashed:true})], active:1}],
+  ["s-find", "Find in page + downloads", "The find bar slides in under the toolbar. Download progress uses the accent fill.", {theme:"dark", tabs:[newTab("arch"), newTab("gh")], active:0, find:true, findQ:"gaps", popover:"downloads"}],
+  ["s-overflow", "Many tabs", "Inactive tabs shrink to their icon; the active one keeps its title. Beyond that, the strip scrolls.", {theme:"light", tabs:["gh","arch","py","qt","hf","aur","mdn","ollama","grace","music"].map(k=>newTab(k)), active:2, size:"short"}],
+];
+
+function renderScreens() {
+  const host = document.getElementById("screens");
+  host.innerHTML = SCREENS.map(([id, title, cap, opts]) => {
+    if (!FRAMES[id]) FRAMES[id] = {theme:null, ai:null, panel:null, popover:null, editing:false, sel:0, query:"", find:false, findQ:"", perm:false, ...opts};
+    const theme = FRAMES[id].theme;
+    const wide = ["s-compact", "s-overflow"].includes(id);
+    return `<figure style="margin:0;${wide ? "grid-column:1/-1" : ""}"><div class="stage ${theme==="light"?"light":""}"><div data-mount="${id}"></div></div>
+      <figcaption class="caption"><b>${title}.</b> ${cap}</figcaption></figure>`;
+  }).join("");
+  SCREENS.forEach(([id]) => render(id));
+}
+
+// ---------- Component sheet ----------
+function renderSheet() {
+  const side = theme => {
+    const tab = (cls, lead, title, extra="") => `<div class="tab ${cls}" style="flex:0 0 180px">${lead}<span class="t">${title}</span>${extra}<button class="x">${I("x","s14")}</button></div>`;
+    return `<div class="cc" data-theme="${theme}"><div class="spec">
+      <span class="k">Traffic lights</span><span class="v"><span class="tl"><button class="c"></button><button class="m"></button><button class="x"></button></span>
+        <span class="tl" style="pointer-events:none"><button class="c"><svg viewBox="0 0 12 12" style="opacity:1"><path d="M3.5 3.5l5 5M8.5 3.5l-5 5"/></svg></button><button class="m"><svg viewBox="0 0 12 12" style="opacity:1"><path d="M3 6h6"/></svg></button><button class="x"><svg viewBox="0 0 12 12" style="opacity:1"><path d="M6 3v6M3 6h6"/></svg></button></span>
+        <span class="win inactive" style="height:auto;box-shadow:none;background:none"><span class="tl"><button class="c"></button><button class="m"></button><button class="x"></button></span></span>
+        <span style="font-size:11px;color:var(--text-secondary)">rest · hover · inactive</span></span>
+      <span class="k">Tab</span><span class="v">${tab("", fav("arch"), "Inactive")}${tab("active", fav("gh"), "Active")}</span>
+      <span class="k"></span><span class="v">${tab("", spinner, "Loading")}${tab("", fav("music"), "Playing", `<span class="st">${I("speaker","s14")}</span>`)}</span>
+      <span class="k"></span><span class="v">${tab("", fav("music"), "Muted", `<span class="st muted">${I("mute","s14")}</span>`)}${tab("", fav("meet"), "Recording", `<span class="st"><span class="rec"></span></span>`)}</span>
+      <span class="k"></span><span class="v">${tab("crashed", `<span class="fav-crash">${I("alert")}</span>`, "Page crashed")}${tab("", fav("gh")+'<span class="attn"></span>', "Needs attention")}</span>
+      <span class="k"></span><span class="v">${tab("dragging", fav("py"), "Dragging")}<div class="tab pinned">${fav("gh")}</div><div class="tab active pinned">${fav("arch")}</div><span style="font-size:11px;color:var(--text-secondary)">pinned</span></span>
+      <span class="k">Icon button</span><span class="v"><button class="ib">${I("reload")}</button><button class="ib" style="background:var(--control-hover)">${I("reload")}</button><button class="ib on">${I("menu")}</button><button class="ib" disabled>${I("forward")}</button><button class="ib" style="outline:2px solid var(--a-text);outline-offset:1px">${I("back")}</button><button class="ib ai">${I("spark")}</button><span style="font-size:11px;color:var(--text-secondary)">rest · hover · open · disabled · focus · AI</span></span>
+      <span class="k">Pill button</span><span class="v"><button class="pill primary">Allow once</button><button class="pill primary" style="background:color-mix(in srgb,var(--accent-fill) 90%,#000)">Hover</button><button class="pill">Deny</button><button class="pill" style="background:var(--control-hover)">Hover</button><button class="pill ghost">Details</button><button class="pill" disabled>Disabled</button></span>
+      <span class="k">Text field</span><span class="v" style="display:grid;grid-template-columns:1fr 1fr;width:100%"><label class="field">${I("search","s14")}<input placeholder="Placeholder"></label><label class="field focus">${I("search","s14")}<input value="Focused"></label><label class="field" style="background:var(--control-strong)">${I("search","s14")}<input value="Hover"></label><label class="field invalid">${I("search","s14")}<input value="Error"></label></span>
+      <span class="k">Address bar</span><span class="v" style="display:grid;gap:8px;width:100%">
+        <div class="addr"><span class="site">${I("lock","s14")}</span><span class="url"><span class="host">wiki.archlinux.org</span><span class="rest">/title/Hyprland</span></span></div>
+        <div class="addr"><span class="site warn">${I("warning","s14")}</span><span class="url"><span class="notsecure">Not secure</span><span class="host">old.example.org</span><span class="rest">/login</span></span></div>
+        <div class="addr"><span class="site">${I("file","s14")}</span><span class="url"><span class="host">file:///home/harsh</span><span class="rest">/notes/index.html</span></span></div>
+        <div class="addr focus"><span class="site">${I("search","s14")}</span><span class="url" style="color:var(--text)"><span style="background:color-mix(in srgb,var(--accent-fill) 55%,transparent);border-radius:2px">https://wiki.archlinux.org/title/Hyprland</span></span></div></span>
+      <span class="k">List rows</span><span class="v" style="display:block;width:100%">
+        <div class="li">${I("clock","s14")}<span class="main">Rest</span><span class="tail">34 px</span></div>
+        <div class="li" style="background:var(--control-hover)">${I("clock","s14")}<span class="main">Hover</span></div>
+        <div class="li sel">${I("clock","s14")}<span class="main">Selected (keyboard)</span></div>
+        <div class="li" aria-disabled="true">${I("clock","s14")}<span class="main">Disabled</span></div></span>
+      <span class="k">Progress</span><span class="v" style="display:grid;gap:10px;width:100%"><div style="position:relative;height:6px"><div class="progress" style="bottom:auto;top:2px"><i style="--w:45%"></i></div></div><div class="bar"><i style="width:62%"></i></div><div class="bar paused"><i style="width:30%"></i></div></span>
+      <span class="k">Switch · segmented</span><span class="v"><span class="toggle" aria-checked="true"></span><span class="toggle" aria-checked="false"></span><span class="segc"><span class="on">This tab</span><span>Until quit</span></span></span>
+      <span class="k">Chips</span><span class="v"><span class="chip"><span class="dot"></span>Local AI · on this device</span><span class="chip">Local AI · Off</span><span class="chip remote">${I("cloud","s14")}Remote · Anthropic API</span><span class="private">${I("eyeoff","s14")}Private</span></span>
+      <span class="k">Find bar</span><span class="v" style="width:100%"><div class="findbar" style="animation:none;padding:0;border:0;background:none;height:auto"><label class="field focus" style="width:200px">${I("search","s14")}<input value="zzz"></label><span class="count none">No matches</span></div></span>
+    </div></div>`;
+  };
+  document.getElementById("sheet").innerHTML = side("dark") + side("light");
+}
+
+// ---------- Token tables ----------
+function rgbOf(c) {
+  const m = c.match(/rgba?\(([^)]+)\)/);
+  if (m) { const p = m[1].split(",").map(Number); return {r:p[0], g:p[1], b:p[2], a:p[3] ?? 1}; }
+  const h = c.replace("#",""); return {r:parseInt(h.slice(0,2),16), g:parseInt(h.slice(2,4),16), b:parseInt(h.slice(4,6),16), a:1};
+}
+const over = (fg, bg) => { const f = rgbOf(fg), b = rgbOf(bg); return `rgb(${Math.round(f.a*f.r+(1-f.a)*b.r)},${Math.round(f.a*f.g+(1-f.a)*b.g)},${Math.round(f.a*f.b+(1-f.a)*b.b)})`; };
+const lum = c => { const {r,g,b} = rgbOf(c); const ch = v => (v/=255) <= .04045 ? v/12.92 : Math.pow((v+.055)/1.055, 2.4); return .2126*ch(r)+.7152*ch(g)+.0722*ch(b); };
+const ratio = (a,b) => { const x = lum(a), y = lum(b); return (Math.max(x,y)+.05)/(Math.min(x,y)+.05); };
+
+function renderTokens() {
+  const swatch = v => `<span class="sw" style="background:${v.split(" / ")[0]}"></span><code>${v}</code>`;
+  document.getElementById("tok-colors").innerHTML = `<tr><th>Token</th><th>Dark</th><th>Light (proposed)</th><th>Use</th></tr>` +
+    COLORS.map(([k,d,l,u]) => `<tr><td><code>${k}</code></td><td>${swatch(d)}</td><td>${swatch(l)}</td><td>${u}</td></tr>`).join("");
+  document.getElementById("tok-accents").innerHTML = `<tr><th>Accent</th><th>base (picker)</th><th>fill (white label)</th><th>fg (dark text, icons, rings)</th><th>fg-light (light text, icons, rings)</th><th>tint (dark glow)</th></tr>` +
+    Object.entries(ACCENTS).map(([n,a]) => `<tr${n===S.accent?' style="background:#f3f6fb"':""}><td><b>${n}</b></td>${["base","fill","fg","fgLight","tint"].map(k=>`<td>${swatch(a[k])}</td>`).join("")}</tr>`).join("");
+  const a = ACCENTS[S.accent];
+  const D = {titlebar:"#181a20", panel:"#17191f", desktop:"#121419", control:"rgba(255,255,255,.065)", selected:"rgba(255,255,255,.14)"};
+  const L = {titlebar:"#ebecef", panel:"#fafafb", desktop:"#f3f4f6", control:"rgba(0,0,0,.05)", selected:"rgba(0,0,0,.10)"};
+  const rows = [
+    ["White label on fill (primary button, both themes)", "#ffffff", a.fill, 4.5],
+    ["White label on fill, hover (fill + 10% black)", "#ffffff", over("rgba(0,0,0,.1)", a.fill), 4.5],
+    ["Dark: fg text on address field", a.fg, over(D.control, D.titlebar), 4.5],
+    ["Dark: fg text on panel", a.fg, D.panel, 4.5],
+    ["Dark: fg icon or focus ring on a selected row", a.fg, over(D.selected, D.panel), 3],
+    ["Dark: focus ring with base instead of fg (brief), on the field", a.base, over(D.control, D.titlebar), 3],
+    ["Light: fg-light text on address field", a.fgLight, over(L.control, L.titlebar), 4.5],
+    ["Light: fg-light icon or ring on a selected row", a.fgLight, over(L.selected, L.panel), 3],
+    ["Light: fill used as text (not used)", a.fill, over(L.control, L.titlebar), 4.5],
+    ["Dark: textSecondary placeholder on field", "#8a90a0", over(D.control, D.titlebar), 4.5],
+    ["Dark: textTertiary placeholder on field (not used)", "#7d8392", over(D.control, D.titlebar), 4.5],
+  ];
+  document.getElementById("tok-contrast").innerHTML = `<tr><th>Pair (${S.accent})</th><th>Foreground</th><th>Background</th><th>Ratio</th><th>Needs</th></tr>` +
+    rows.map(([label,f,b,need]) => { const r = ratio(f,b); return `<tr><td>${label}</td><td>${swatch(f)}</td><td>${swatch(b)}</td><td class="${r>=need?"pass":"fail"}">${r.toFixed(2)}</td><td>${need}:1</td></tr>`; }).join("");
+}
+
+// ---------- Controls ----------
+function applyGlobals() {
+  const a = ACCENTS[S.accent], b = document.body.style;
+  b.setProperty("--accent-base", a.base); b.setProperty("--accent-fill", a.fill); b.setProperty("--accent-fg", a.fg);
+  b.setProperty("--accent-fg-light", a.fgLight); b.setProperty("--accent-tint", a.tint);
+  b.setProperty("--radius", S.radius + "px"); b.setProperty("--gap", S.gap + "px"); b.setProperty("--blur", S.blur ? "7px" : "0px");
+  b.setProperty("--motion", MOTION[S.motion]);
+  document.body.classList.toggle("noblur", !S.blur);
+  document.body.dataset.motion = S.motion;
+}
+function rerenderAll() { applyGlobals(); renderLive(); SCREENS.forEach(([id]) => render(id)); renderTokens(); }
+
+document.getElementById("swatches").innerHTML = Object.entries(ACCENTS).map(([n,a]) =>
+  `<button data-accent="${n}" aria-label="${n}" aria-pressed="${n===S.accent}" style="background:${a.base}"></button>`).join("");
+document.getElementById("controls").addEventListener("click", e => {
+  const sw = e.target.closest("[data-accent]");
+  if (sw) { S.accent = sw.dataset.accent; document.querySelectorAll("[data-accent]").forEach(x => x.setAttribute("aria-pressed", x === sw)); rerenderAll(); return; }
+  if (e.target.id === "simulate-perm") { const o = FRAMES.live; o.active = 0; o.tabs[0] = {...o.tabs[0], site:"meet", page:"site", recording:false}; o.perm = true; o.popover = null; render("live"); return; }
+  const btn = e.target.closest(".seg button"); if (!btn) return;
+  const seg = btn.parentElement, key = seg.dataset.ctl, v = btn.dataset.v;
+  seg.querySelectorAll("button").forEach(x => x.setAttribute("aria-pressed", x === btn));
+  if (key === "theme") S.theme = v; else if (key === "blur") S.blur = v === "on"; else if (key === "motion") S.motion = v;
+  else if (key === "ai") { S.ai = v === "on"; if (!S.ai) FRAMES.live.panel = null; }
+  else if (key === "header") S.header = v; else if (key === "layout") S.layout = v; else if (key === "bookmarks") S.bookmarks = v === "on";
+  rerenderAll();
+});
+document.getElementById("controls").addEventListener("input", e => {
+  const k = e.target.dataset.ctl; if (!k) return;
+  S[k] = +e.target.value; e.target.nextElementSibling.textContent = e.target.value + " px"; applyGlobals();
+});
+
+// ---------- Interactions inside frames ----------
+function frameOf(el) { const w = el.closest("[data-frame]"); return w ? w.dataset.frame : null; }
+document.addEventListener("click", e => {
+  const id = frameOf(e.target); if (!id) return;
+  const o = FRAMES[id], act = e.target.closest("[data-act]"), a = act && act.dataset.act;
+  const insidePop = e.target.closest(".pop");
+  if (a === "close-tab") { e.stopPropagation(); const i = +act.dataset.i; o.tabs.splice(i,1); if (!o.tabs.length) o.tabs.push(newTab(null)); o.active = Math.min(o.active, o.tabs.length-1); if (i < o.active) o.active--; o.popover = null; o.perm = false; render(id); return; }
+  if (a === "tab") { o.active = +act.dataset.i; o.editing = false; o.popover = null; o.perm = false; render(id); return; }
+  if (a === "new-tab") { o.tabs.push(newTab(null)); o.active = o.tabs.length-1; o.editing = true; o.query = ""; o.sel = 0; o.popover = null; render(id); return; }
+  if (a === "edit") { const t = o.tabs[o.active]; o.editing = true; o.query = t.site ? `https://${SITES[t.site].host}${SITES[t.site].path}` : ""; o._selectAll = true; o.sel = 0; o.popover = null; o.perm = false; render(id); return; }
+  if (a === "siteinfo") { o.popover = o.popover === "siteinfo" ? null : "siteinfo"; o.perm = false; render(id); return; }
+  if (a === "downloads" || a === "menu") { o.popover = o.popover === a ? null : a; o.perm = false; render(id); return; }
+  if (a === "ai") { o.panel = o.panel === "ai" ? null : "ai"; render(id); return; }
+  if (a === "reload") { const t = o.tabs[o.active]; if (t.loading || o.loading) { t.loading = false; o.loading = false; } else { o.loading = true; setTimeout(() => { o.loading = false; render(id); }, 1800 * Math.max(MOTION[S.motion], .2)); } render(id); return; }
+  if (a === "bookmark") { const t = o.tabs[o.active]; t.bookmarked = !t.bookmarked; render(id); return; }
+  if (a === "close-find") { o.find = false; render(id); return; }
+  if (a === "perm-allow" || a === "perm-deny") { o.perm = false; const t = o.tabs[o.active]; t.recording = a === "perm-allow"; render(id); return; }
+  if (a === "perm-details") { const d = document.querySelector(`[data-frame="${id}"] #perm-details`); d.hidden = !d.hidden; act.setAttribute("aria-expanded", !d.hidden); act.textContent = d.hidden ? "Details" : "Hide details"; return; }
+  if (!insidePop && (o.popover || (o.editing && !e.target.closest(".addr")))) { o.popover = null; if (!e.target.closest(".addr")) o.editing = false; render(id); }
+});
+document.addEventListener("keydown", e => {
+  const id = frameOf(e.target) || (document.activeElement && frameOf(document.activeElement)); if (!id) return;
+  const o = FRAMES[id];
+  if (e.key === "Escape") { if (o.editing) o.editing = false; else if (o.popover || o.perm) { o.popover = null; o.perm = false; } else if (o.find) o.find = false; else if (o.panel) o.panel = null; render(id); e.preventDefault(); return; }
+  if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "f") { o.find = true; o._focusFind = true; if (!o.findQ) o.findQ = ""; render(id); e.preventDefault(); return; }
+  if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "l") { document.querySelector(`[data-frame="${id}"] [data-act="edit"]`)?.click(); e.preventDefault(); return; }
+  if (e.target.dataset.role === "addr") {
+    if (e.key === "ArrowDown" || e.key === "ArrowUp") { o.sel = (o.sel + (e.key === "ArrowDown" ? 1 : -1) + o._count) % Math.max(o._count,1); render(id); e.preventDefault(); return; }
+    if (e.key === "Enter") { const t = o.tabs[o.active]; const q = o.query.trim(); o.editing = false; if (q) { const key = Object.keys(SITES).find(k => (SITES[k].host + SITES[k].title).toLowerCase().includes(q.toLowerCase())); Object.assign(t, {site: key || "arch", page:"site"}); o.loading = true; setTimeout(()=>{o.loading=false; render(id);}, 1500 * Math.max(MOTION[S.motion], .2)); } render(id); e.preventDefault(); }
+  }
+});
+document.addEventListener("input", e => {
+  const id = frameOf(e.target); if (!id) return;
+  const o = FRAMES[id];
+  if (e.target.dataset.role === "addr") { o.query = e.target.value; o.sel = 0; render(id); }
+  if (e.target.dataset.role === "find") { o.findQ = e.target.value; const pos = e.target.selectionStart; render(id); const f = document.querySelector(`[data-frame="${id}"] [data-role="find"]`); f.focus(); f.setSelectionRange(pos,pos); }
+});
+
+// ---------- Boot ----------
+FRAMES.live = liveFrame();
+applyGlobals();
+renderLive();
+renderScreens();
+renderSheet();
+renderTokens();
+</script>
+</body>
+</html>
