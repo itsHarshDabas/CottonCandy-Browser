@@ -1,0 +1,18 @@
+name: check
+on: [push, pull_request, workflow_dispatch]
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    container: archlinux:latest
+    steps:
+      - run: pacman -Syu --noconfirm --needed python python-pytest desktop-file-utils make git
+      - uses: actions/checkout@v4
+      - run: make check
+      # The packaged dependencies exist and the script's Qt imports resolve against them.
+      - run: pacman -S --noconfirm --needed pyside6 qt6-webengine qt6-svg
+      - run: >-
+          python -c "from PySide6 import QtSvg, QtNetwork, QtWebEngineCore, QtWebEngineWidgets;
+          from PySide6.QtWebEngineCore import QWebEngineProfile, QWebEngineSettings;
+          assert hasattr(QWebEngineProfile, 'setPersistentPermissionsPolicy');
+          assert hasattr(QWebEngineSettings.UnknownUrlSchemePolicy, 'AllowUnknownUrlSchemesFromUserInteraction');
+          print('pyside6 + qt6-webengine OK')"

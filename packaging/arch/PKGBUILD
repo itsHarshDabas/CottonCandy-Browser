@@ -1,0 +1,34 @@
+# Maintainer: GraceOS <https://github.com/itsHarshDabas/GraceOS>
+pkgname=cottoncandy-git
+pkgver=r1
+pkgrel=1
+pkgdesc="CottonCandy, the GraceOS web browser (Chromium through Qt WebEngine)"
+arch=(any)
+url=https://github.com/itsHarshDabas/CottonCandy-Browser
+license=(LicenseRef-unspecified)
+depends=(python pyside6 qt6-webengine qt6-svg)
+makedepends=(git make)
+checkdepends=(python-pytest desktop-file-utils)
+optdepends=(
+  'xdg-utils: hand mailto: links to the mail app'
+  'cherrycola: summarize pages with a local model (from the GraceOS repo)'
+)
+provides=(cottoncandy)
+conflicts=(cottoncandy)
+source=("git+$url.git")
+sha256sums=(SKIP)
+
+pkgver() {
+  cd CottonCandy-Browser
+  printf "r%s.%s" "$(git rev-list --count HEAD)" "$(git rev-parse --short HEAD)"
+}
+
+check() {
+  cd CottonCandy-Browser
+  make check
+}
+
+package() {
+  cd CottonCandy-Browser
+  make DESTDIR="$pkgdir" PREFIX=/usr install
+}
