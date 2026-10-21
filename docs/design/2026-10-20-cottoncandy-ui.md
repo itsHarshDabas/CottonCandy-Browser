@@ -200,7 +200,7 @@ These are the worst cases across all nine accents, from `contrast.py`.
 
 ### 3.4 Popovers
 - **Site info**, from the site icon: the host; the connection state, written as a sentence; the per-site permissions (Camera, Microphone, Notifications: Ask, Allowed or Blocked); and "Clear cookies and site data…".
-- **Permission request:** anchored to the site icon and styled like the Grace approval card.
+- **Permission request:** anchored to the site icon and styled like the Grace approval card. (As built: "Your answer lasts for this tab. Other tabs ask again.", see §7.)
   - A 30 px icon badge.
   - "**meet.example.org wants to use your microphone**", then the secondary line "Only for this tab. It stays off until you choose."
   - Buttons: primary **Allow once**, neutral **Deny**, ghost **Details**. Details expands inline to show the device, the requesting origin and how long the answer lasts.
@@ -314,23 +314,34 @@ Only in the mockup: the private window, the offline page, the certificate error,
 - **Motion:** respects reduce motion (§2.4).
 - **Screen readers:** tabs use `role=tab` with a selected state. Popovers are dialogs or menus with labels. Find match counts use a polite live region. Icon-only buttons have names ("Back", "Downloads, 1 in progress").
 
-## 7. What v0 must change to match
-v0 is the code in [itsHarshDabas/CottonCandy-Browser#1](https://github.com/itsHarshDabas/CottonCandy-Browser/pull/1).
+## 7. Implementation status
+The app was first built as v0 ([itsHarshDabas/CottonCandy-Browser#1](https://github.com/itsHarshDabas/CottonCandy-Browser/pull/1)); the UI work followed.
 
-1. **Traffic lights and window dragging in row 1:** v0 has no window controls of its own.
-2. **Tab states:** loading spinner, audio and mute, pinned, crashed, attention, overflow to icons, and a tab list. v0 has close buttons and favicons only.
-3. **Address bar:**
-   - Show the host and the rest of the URL in separate colors, with "Not secure" only for non-local http. v0 shows the full URL.
-   - A grouped dropdown on the `panel` surface instead of the plain QCompleter list.
-4. **Permission popover with "Allow once"**, anchored to the site icon, instead of v0's QMessageBox with "remember until quit". The default lasts for the tab.
-5. **A site info popover.**
-6. **Downloads:** pause, retry, speed and time left; the ring on the toolbar button.
-7. **Main menu:** a zoom row, and shortcuts shown as `kbd` chips.
-8. **New tab page, error pages and settings page:** internal HTML pages drawn with these tokens. v0 shows `about:blank` and Chromium's error pages.
-9. **Find bar:** the Match case toggle, and the "No matches" style.
-10. **Light theme** following GraceOS Dark Style, and placeholders in `textSecondary`. v0 forces dark.
-11. **Grace panel and AI touches:** Phase 4, opt-in, through the local `cherrycola` CLI only.
-12. **Optional:** vertical tabs, compact header, bookmarks bar.
+**Built** (each was checked in a real run; see the README's Test section):
+1. **Traffic lights** in row 1. The window is frameless, can be dragged and double-clicked to maximize, and resizes from its edges. Inactive windows show gray lights.
+2. **Tab states:**
+   - A spinner while loading, the favicon (remembered between visits), and "Page crashed".
+   - Audio and mute buttons, which aren't checked in a real run yet.
+   - Pinned tabs (from the right-click menu). Inactive tabs collapse to icons when crowded.
+   - The ⌄ list of all tabs, and reopening closed tabs.
+3. **Address bar:** the host and the rest of the URL in separate colors; "Not secure" only for non-local http; an "info" icon for local servers. Grouped suggestions (open tabs, bookmarks, history, search) appear on a `panel` card.
+4. **Permission card** anchored to the site icon, with Allow once, Deny and Details. Enter and Esc deny, and it stays until answered.
+   - The answer lasts for the tab, because Chromium keeps it for the tab's lifetime even with nothing stored. The copy says so.
+   - This differs from §3.4, which said "Only for this tab. It stays off until you choose".
+5. **Site info card**, with the connection state and how permissions work. There are no per-site toggles: with "ask every time" there's nothing to toggle.
+6. **Downloads:** pause, resume, cancel, retry and show in folder; speed and time left; the progress ring on the toolbar button.
+7. **Main menu:** a zoom row, shortcuts, and "Clear cookies and cache…".
+8. **New tab page and error pages** at `cottoncandy:` (offline, unknown host, certificate, other). Neither runs scripts or loads anything from the network.
+   - Error pages replace Chromium's in place, so the failed address stays in the bar and Back works.
+   - The settings page is **not** built (see below).
+9. **Find bar:** Match case, "1 of 2", and "No matches" in `error`.
+10. **Light theme and live theming:** it follows `style` and `accent` in `~/.config/grace/desktop.conf`, and sets the color scheme sites see. Placeholders use `textSecondary`.
+
+**Not built yet:**
+- The settings page (`cottoncandy://settings`).
+- The recording dot and the attention dot on tabs.
+- The bookmarks bar, vertical tabs and the compact header.
+- The Grace panel and other AI touches (Phase 4: opt-in, local `cherrycola` only).
 
 ## 8. Open questions
 - **Minimize on Hyprland:** Hyprland has no native minimize. GraceOS sets `close,minimize,maximize:`, so how does the shell treat "minimize": a special workspace or a dock stash? CottonCandy should call the same thing.

@@ -12,7 +12,12 @@ jobs:
       - run: pacman -S --noconfirm --needed pyside6 qt6-webengine qt6-svg
       - run: >-
           python -c "from PySide6 import QtSvg, QtNetwork, QtWebEngineCore, QtWebEngineWidgets;
-          from PySide6.QtWebEngineCore import QWebEngineProfile, QWebEngineSettings;
-          assert hasattr(QWebEngineProfile, 'setPersistentPermissionsPolicy');
+          from PySide6.QtWebEngineCore import QWebEngineProfile, QWebEngineSettings, QWebEngineUrlScheme, QWebEngineLoadingInfo, QWebEnginePage;
+          from PySide6.QtGui import QWindow, QStyleHints;
+          assert hasattr(QWebEngineProfile.PersistentPermissionsPolicy, 'AskEveryTime');
           assert hasattr(QWebEngineSettings.UnknownUrlSchemePolicy, 'AllowUnknownUrlSchemesFromUserInteraction');
+          assert hasattr(QWebEngineSettings.WebAttribute, 'ErrorPageEnabled');
+          assert hasattr(QWebEngineLoadingInfo.ErrorDomain, 'CertificateErrorDomain');
+          assert all(hasattr(QWebEnginePage, n) for n in ('loadingChanged', 'recentlyAudibleChanged', 'permissionRequested'));
+          assert hasattr(QWindow, 'startSystemMove') and hasattr(QStyleHints, 'setColorScheme');
           print('pyside6 + qt6-webengine OK')"

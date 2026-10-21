@@ -13,11 +13,13 @@ from urllib.parse import quote_plus
 APP_ID = "org.graceos.CottonCandy"
 APP_NAME = "CottonCandy"
 DESKTOP_FILE = APP_ID + ".desktop"
-HOME_URL = "about:blank"
+INTERNAL_SCHEME = "cottoncandy"
+HOME_URL = "cottoncandy://newtab"
 SEARCH_URL = "https://duckduckgo.com/?q={}"
 DEFAULT_FONT = "Inter"
+MONO_FONT = "Fira Code"
 # The address bar and the command line open these schemes; anything else typed there is a search.
-OPENABLE_SCHEMES = ("http", "https", "file", "about", "view-source", "chrome")
+OPENABLE_SCHEMES = ("http", "https", "file", "about", "view-source", "chrome", INTERNAL_SCHEME)
 # Links with these schemes go to the user's default app; every other unknown scheme is refused.
 HANDOFF_SCHEMES = ("mailto",)
 # Pages may load these in frames or navigate to them themselves; they never come from the address bar.
@@ -29,41 +31,81 @@ HANDLER_TYPES = (
     "application/xhtml+xml",
 )
 MAX_REQUEST_BYTES = 1 << 20
-BACKGROUND = "#121419"
-WINDOW = "#1c1e25"
-TITLEBAR = "#181a20"
-PANEL = "#17191f"
-TEXT = "#e6e8ee"
-TEXT_CONTROL = "#d9dce5"
-TEXT_SECONDARY = "#8a90a0"
-TEXT_TERTIARY = "#7d8392"
-ERROR = "#ff8a8a"
-# The accents of the Grace shell (grace-candyland shell/config/Theme.qml): fill behind white text, fg as text.
-ACCENTS = {
-    "blue": {"fill": "#2f75cb", "fg": "#4b92e7"},
-    "teal": {"fill": "#1d8092", "fg": "#399cae"},
-    "green": {"fill": "#348442", "fg": "#50a05e"},
-    "yellow": {"fill": "#9c6a00", "fg": "#c88800"},
-    "orange": {"fill": "#c74c00", "fg": "#ee650f"},
-    "red": {"fill": "#dd2b3f", "fg": "#ec6271"},
-    "pink": {"fill": "#b55282", "fg": "#d86a9f"},
-    "purple": {"fill": "#9141ac", "fg": "#b27ac5"},
-    "slate": {"fill": "#657788", "fg": "#8092a3"},
+# Design tokens (docs/design/2026-10-20-cottoncandy-ui.md section 2). Dark is grace-candyland's
+# shell/config/Theme.qml; light is the proposed mirror, checked for WCAG AA by docs/design/contrast.py.
+THEMES = {
+    "dark": {
+        "desktop": "#121419", "window": "#1c1e25", "titlebar": "#181a20", "sidebar": "#17191f", "panel": "#17191f",
+        "hair": "rgba(255,255,255,0.08)", "subtle": "rgba(255,255,255,0.05)", "card": "rgba(255,255,255,0.045)",
+        "control": "rgba(255,255,255,0.065)", "control_strong": "rgba(255,255,255,0.09)",
+        "control_hover": "rgba(255,255,255,0.12)", "selected": "rgba(255,255,255,0.14)", "track": "rgba(255,255,255,0.12)",
+        "text_strong": "#f1f2f6", "text": "#e6e8ee", "text_control": "#d9dce5", "text_secondary": "#8a90a0",
+        "text_tertiary": "#7d8392", "success": "#7ed99c", "error": "#ff8a8a", "shadow": "rgba(0,0,0,0.45)",
+    },
+    "light": {
+        "desktop": "#f3f4f6", "window": "#ffffff", "titlebar": "#ebecef", "sidebar": "#f0f1f4", "panel": "#fafafb",
+        "hair": "rgba(0,0,0,0.08)", "subtle": "rgba(0,0,0,0.06)", "card": "rgba(0,0,0,0.035)",
+        "control": "rgba(0,0,0,0.05)", "control_strong": "rgba(0,0,0,0.07)",
+        "control_hover": "rgba(0,0,0,0.08)", "selected": "rgba(0,0,0,0.10)", "track": "rgba(0,0,0,0.10)",
+        "text_strong": "#14161a", "text": "#1d1f24", "text_control": "#2b2f37", "text_secondary": "#575d6a",
+        "text_tertiary": "#868b97", "success": "#1a7f37", "error": "#c01c28", "shadow": "rgba(0,0,0,0.16)",
+    },
 }
-# Line icons on a 24 px grid, drawn like the shell's (shell/widgets/icons.js).
+# The accents of the Grace shell. fill takes a white label; fg is text/icons/focus on dark; fg_light the same
+# on light; tint is the glow behind the new tab page. Pink and purple fg are one step lighter than
+# Theme.qml so they reach 4.5:1 on the address field.
+ACCENTS = {
+    "blue": {"base": "#3584e4", "fill": "#2f75cb", "fg": "#4b92e7", "fg_light": "#2663a9", "tint": "#20324d"},
+    "teal": {"base": "#2190a4", "fill": "#1d8092", "fg": "#399cae", "fg_light": "#186c78", "tint": "#1c3540"},
+    "green": {"base": "#3a944a", "fill": "#348442", "fg": "#50a05e", "fg_light": "#2c713a", "tint": "#21362e"},
+    "yellow": {"base": "#c88800", "fill": "#9c6a00", "fg": "#c88800", "fg_light": "#845a00", "tint": "#3e331f"},
+    "orange": {"base": "#ed5b00", "fill": "#c74c00", "fg": "#ee650f", "fg_light": "#a94300", "tint": "#452a1f"},
+    "red": {"base": "#e62d42", "fill": "#dd2b3f", "fg": "#ec6271", "fg_light": "#bd2337", "tint": "#44212c"},
+    "pink": {"base": "#d56199", "fill": "#b55282", "fg": "#d96ba0", "fg_light": "#9b4670", "tint": "#402b3e"},
+    "purple": {"base": "#9141ac", "fill": "#9141ac", "fg": "#b37bc6", "fg_light": "#8e40a9", "tint": "#332542"},
+    "slate": {"base": "#6f8396", "fill": "#657788", "fg": "#8092a3", "fg_light": "#536572", "tint": "#2c323d"},
+}
+TRAFFIC_LIGHTS = ("#ff5f57", "#febc2e", "#28c840")
+# Line icons on a 24 px grid, drawn like the shell's (grace-candyland shell/widgets/icons.js).
 ICONS = {
     "back": "M19 12H5M11 6l-6 6 6 6",
     "forward": "M5 12h14M13 6l6 6-6 6",
     "reload": "M19.5 12a7.5 7.5 0 1 1-2.2-5.3M19.5 4.5v4h-4",
     "x": "M6 6l12 12M18 6L6 18",
     "plus": "M12 5v14M5 12h14",
+    "minus": "M5 12h14",
     "star": "M12 3.8l2.5 5.2 5.7.8-4.1 4 1 5.7L12 16.8l-5.1 2.7 1-5.7-4.1-4 5.7-.8z",
     "download": "M12 3.5v11M7.5 10.5l4.5 4.5 4.5-4.5M4.5 20h15",
     "menu": "M4.5 7h15M4.5 12h15M4.5 17h15",
     "lock": "M7.5 11h9a2.5 2.5 0 0 1 2.5 2.5v4.5a2.5 2.5 0 0 1 -2.5 2.5h-9a2.5 2.5 0 0 1 -2.5 -2.5v-4.5a2.5 2.5 0 0 1 2.5 -2.5z M8 11V8a4 4 0 0 1 8 0v3",
     "warning": "M12 4l9 16H3z M12 10v4M12 17h.01",
+    "info": "M3 12a9 9 0 1 0 18 0a9 9 0 1 0 -18 0z M12 11v5M12 8h.01",
     "search": "M4.5 11a6.5 6.5 0 1 0 13 0a6.5 6.5 0 1 0 -13 0z M20 20l-4.2-4.2",
     "folder": "M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z",
+    "file": "M7 3.5h6.5L18 8v11a1.5 1.5 0 0 1-1.5 1.5h-9.5A1.5 1.5 0 0 1 5.5 19V5A1.5 1.5 0 0 1 7 3.5zM13 3.5V8.5h5",
+    "chevd": "M6 9l6 6 6-6",
+    "chevu": "M6 15l6-6 6 6",
+    "eyeoff": "M3.5 12S6.5 6.5 12 6.5c1.6 0 3 .4 4.2 1.1M20.5 12s-3 5.5-8.5 5.5c-1.6 0-3-.4-4.2-1.1M9.9 9.9a3 3 0 0 0 4.2 4.2M4 4l16 16",
+    "speaker": "M11 5L6 9H3v6h3l5 4zM15.5 8.5a5 5 0 0 1 0 7M18.5 6a8.5 8.5 0 0 1 0 12",
+    "mute": "M11 5L6 9H3v6h3l5 4zM16 9.5l5 5M21 9.5l-5 5",
+    "alert": "M3 12a9 9 0 1 0 18 0a9 9 0 1 0-18 0zM12 7.5v5.5M12 16.5h.01",
+    "globe": "M3 12a9 9 0 1 0 18 0a9 9 0 1 0 -18 0z M3 12h18M12 3c3 3.2 3 14.8 0 18M12 3c-3 3.2-3 14.8 0 18",
+    "pause": "M8.5 5.5v13M15.5 5.5v13",
+    "play": "M8 5.5l11 6.5-11 6.5z",
+    "fullscreen": "M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5",
+    "window": "M4.5 4h15a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2h-15a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2zM2.5 8.5h19",
+    "clock": "M3 12a9 9 0 1 0 18 0a9 9 0 1 0-18 0zM12 7v5l3 2",
+    "bookmark": "M6.5 3.5h11v17L12 16.5l-5.5 4z",
+    "code": "M9 7l-5 5 5 5M15 7l5 5-5 5",
+    "gear": "M9 12a3 3 0 1 0 6 0a3 3 0 1 0 -6 0z M12 3v2.5M12 18.5V21M3 12h2.5M18.5 12H21M5.6 5.6l1.8 1.8M16.6 16.6l1.8 1.8M5.6 18.4l1.8-1.8M16.6 7.4l1.8-1.8",
+    "power": "M12 3v8M7 6.5a7 7 0 1 0 10 0",
+    "shieldx": "M12 3l8 3v6c0 5-3.5 8-8 9-4.5-1-8-4-8-9V6zM9.5 9.5l5 5M14.5 9.5l-5 5",
+    "wifioff": "M2.5 9a14 14 0 0 1 6-3.3M13.5 5.6A14 14 0 0 1 21.5 9M5.5 12.5a9.5 9.5 0 0 1 3.5-2.2M15.5 10.6a9.5 9.5 0 0 1 3 1.9M9 16a4.5 4.5 0 0 1 6 0M12 19.5h.01M3 3l18 18",
+    "trash": "M4.5 7h15M9.5 7V4.5h5V7M6.5 7l1 13h9l1-13",
+    "mic": "M9 6a3 3 0 0 1 6 0v5a3 3 0 0 1-6 0zM5.5 11a6.5 6.5 0 0 0 13 0M12 17.5V21",
+    "camera": "M4.5 7h9a2 2 0 0 1 2 2v6a2 2 0 0 1-2 2h-9a2 2 0 0 1-2-2V9a2 2 0 0 1 2-2zM15.5 10.5l5-3v9l-5-3",
+    "pin": "M12 21s-6.5-5.6-6.5-11a6.5 6.5 0 0 1 13 0c0 5.4-6.5 11-6.5 11zM10 10a2 2 0 1 0 4 0a2 2 0 1 0-4 0z",
+    "bell": "M18 8.5a6 6 0 1 0-12 0c0 6.5-2.5 8.5-2.5 8.5h17S18 15 18 8.5M10.3 20.5a2 2 0 0 0 3.4 0",
 }
 # What a site may ask for, as shown in the prompt. Anything missing here is denied without asking.
 PERMISSIONS = {
@@ -76,6 +118,11 @@ PERMISSIONS = {
     "Notifications": "show notifications",
     "ClipboardReadWrite": "read and change your clipboard",
     "MouseLock": "hide and lock your mouse pointer",
+}
+PERMISSION_ICONS = {
+    "MediaAudioCapture": "mic", "MediaVideoCapture": "camera", "MediaAudioVideoCapture": "camera",
+    "DesktopVideoCapture": "window", "DesktopAudioVideoCapture": "window", "Geolocation": "pin",
+    "Notifications": "bell", "ClipboardReadWrite": "file", "MouseLock": "info",
 }
 
 
@@ -243,14 +290,384 @@ def window_title(page_title, private=False):
     return "{} — {}".format(title, name) if title else name
 
 
-def grace_accent(text):
-    """The accent picked in ~/.config/grace/desktop.conf ('accent = pink'), like grace-launch reads it."""
-    accent = None
+def _grace_value(text, key, allowed, default):
+    """A value from ~/.config/grace/desktop.conf ('key = value  # comment'; the last one wins), like grace-launch."""
+    value = None
     for line in (text or "").splitlines():
-        match = re.match(r"^\s*accent\s*=\s*([^#\s]*)", line)
+        match = re.match(r"^\s*%s\s*=\s*([^#\s]*)" % re.escape(key), line)
         if match:
-            accent = match.group(1)
-    return accent if accent in ACCENTS else "blue"
+            value = match.group(1)
+    return value if value in allowed else default
+
+
+def grace_accent(text):
+    return _grace_value(text, "accent", ACCENTS, "blue")
+
+
+def grace_style(text):
+    return _grace_value(text, "style", THEMES, "dark")
+
+
+def _hex(color):
+    color = color.lstrip("#")
+    return tuple(int(color[i : i + 2], 16) for i in (0, 2, 4))
+
+
+def mix(color, other, amount):
+    """color moved `amount` (0..1) of the way towards other, both #rrggbb."""
+    a, b = _hex(color), _hex(other)
+    return "#{:02x}{:02x}{:02x}".format(*(round(x + (y - x) * amount) for x, y in zip(a, b)))
+
+
+def theme_tokens(style="dark", accent="blue"):
+    style = style if style in THEMES else "dark"
+    swatch = ACCENTS.get(accent, ACCENTS["blue"])
+    tokens = dict(THEMES[style])
+    tokens.update(
+        style=style,
+        accent_base=swatch["base"],
+        accent_fill=swatch["fill"],
+        accent_fill_hover=mix(swatch["fill"], "#000000", 0.10),
+        accent_fill_pressed=mix(swatch["fill"], "#000000", 0.18),
+        accent_text=swatch["fg"] if style == "dark" else swatch["fg_light"],
+        tint=swatch["tint"] if style == "dark" else mix("#f3f4f6", swatch["base"], 0.14),
+    )
+    return tokens
+
+
+def url_parts(url):
+    """How the address bar shows a URL: kind (secure, insecure, local, file, internal, empty, other), host, rest."""
+    scheme = url_scheme(url)
+    if not url or url == "about:blank" or internal_request(url)[0] == "newtab":
+        return {"kind": "empty", "host": "", "rest": ""}
+    if scheme in ("http", "https"):
+        match = re.match(r"^[A-Za-z]+://([^/?#]*)(.*)$", url)
+        host, rest = (match.group(1), match.group(2)) if match else (url, "")
+        hostname = re.sub(r":\d+$", "", host.rsplit("@", 1)[-1])
+        if scheme == "https":
+            kind = "secure"
+        else:
+            kind = "local" if is_local_host(hostname) else "insecure"
+        return {"kind": kind, "host": host, "rest": "" if rest == "/" else rest}
+    if scheme == "file":
+        return {"kind": "file", "host": "file://", "rest": url[len("file://") :]}
+    if scheme == INTERNAL_SCHEME:
+        return {"kind": "internal", "host": url, "rest": ""}
+    return {"kind": "other", "host": url, "rest": ""}
+
+
+def format_speed(bytes_per_second):
+    if not bytes_per_second or bytes_per_second <= 0:
+        return ""
+    return format_bytes(int(bytes_per_second)) + "/s"
+
+
+def format_eta(seconds):
+    if seconds is None or seconds < 0:
+        return ""
+    seconds = int(seconds)
+    if seconds < 60:
+        return "{} s left".format(max(seconds, 1))
+    if seconds < 3600:
+        return "{} min left".format(round(seconds / 60))
+    return "{} h {} min left".format(seconds // 3600, (seconds % 3600) // 60)
+
+
+def build_suggestions(text, open_tabs=(), bookmarks=(), history=(), search_url=SEARCH_URL):
+    """Grouped address-bar suggestions, all local: open tabs, bookmarks, history, then the search itself."""
+    query = (text or "").strip()
+    if not query:
+        return []
+    needle = query.lower()
+    rows = []
+    seen = set()
+
+    def matches(url, title):
+        return needle in (url or "").lower() or needle in (title or "").lower()
+
+    for url, title in open_tabs:
+        if is_web_url(url) and matches(url, title) and url not in seen and len([r for r in rows if r["group"] == "Open tabs"]) < 2:
+            rows.append({"group": "Open tabs", "title": title or url, "url": url, "kind": "tab"})
+            seen.add(url)
+    for group, source, limit in (("Bookmarks", bookmarks, 3), ("History", history, 5)):
+        count = 0
+        for url, title in source:
+            if url in seen or not matches(url, title) or count >= limit:
+                continue
+            rows.append({"group": group, "title": title or url, "url": url, "kind": "page"})
+            seen.add(url)
+            count += 1
+    target = resolve_input(query, search_url)
+    if target is not None and target != search_url.format(quote_plus(query)):
+        rows.append({"group": "Search", "title": query, "url": target, "kind": "address"})
+    rows.append({"group": "Search", "title": query, "url": search_url.format(quote_plus(query)), "kind": "search"})
+    return rows
+
+
+def error_kind(domain, code):
+    """Which error page to show for a failed load (domain is QWebEngineLoadingInfo.ErrorDomain's name)."""
+    if domain == "CertificateErrorDomain":
+        return "cert"
+    if code in (-106,):  # ERR_INTERNET_DISCONNECTED
+        return "offline"
+    if domain == "DnsErrorDomain" or code in (-105, -137):  # name not resolved
+        return "dns"
+    return "other"
+
+
+def _esc(text):
+    return (str(text).replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
+            .replace('"', "&quot;").replace("'", "&#39;"))
+
+
+def svg_icon(name, color, size=16):
+    return (
+        '<svg width="{s}" height="{s}" viewBox="0 0 24 24" fill="none" stroke="{c}" stroke-width="1.7" '
+        'stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="{p}"/></svg>'
+    ).format(s=size, c=color, p=ICONS[name])
+
+
+# Internal pages never run scripts and never load anything from the network.
+_PAGE_CSP = "default-src 'none'; img-src data:; style-src 'unsafe-inline'; form-action " + INTERNAL_SCHEME + ":"
+
+
+def _page(tokens, title, body):
+    t = tokens
+    return """<!doctype html><html lang="en"><head><meta charset="utf-8">
+<meta http-equiv="Content-Security-Policy" content="{csp}"><title>{title}</title><style>
+:root{{color-scheme:{style}}}
+*{{box-sizing:border-box}}
+html,body{{margin:0;height:100%}}
+body{{font:13px/1.45 "{font}",system-ui,sans-serif;color:{text};letter-spacing:-.005em;
+  background:radial-gradient(60% 55% at 50% 28%,{tint} 0%,transparent 72%),{desktop};
+  display:flex;flex-direction:column;align-items:center}}
+a{{color:inherit;text-decoration:none}}
+.field{{width:min(580px,92vw);height:44px;margin-top:clamp(48px,16vh,140px);border-radius:14px;background:{control};
+  border:1px solid {hair};display:flex;align-items:center;gap:10px;padding:0 14px;color:{secondary}}}
+.field:focus-within{{border-color:{accent}}}
+.field input{{flex:1;border:0;outline:0;background:none;font:inherit;font-size:15px;color:{text}}}
+.field input::placeholder{{color:{secondary}}}
+.hint{{margin-top:10px;font-size:12px;color:{secondary}}}
+.grid{{display:grid;grid-template-columns:repeat(auto-fill,82px);justify-content:center;gap:6px 12px;margin-top:30px;width:min(620px,94vw)}}
+.sc{{display:flex;flex-direction:column;align-items:center;gap:8px;padding:12px 4px 10px;border-radius:12px;color:{secondary};font-size:12px;
+  transition:transform .15s cubic-bezier(.2,.9,.25,1),background .15s}}
+.sc:hover,.sc:focus-visible{{transform:translateY(-3px);background:{card};color:{text};outline:none}}
+.sc img,.sc .glyph{{width:32px;height:32px}}
+.sc .glyph{{display:grid;place-items:center;color:{secondary}}}
+.sc span{{max-width:74px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}}
+.recent{{width:min(580px,92vw);margin-top:26px}}
+.grp{{font-size:11px;font-weight:500;color:{secondary};padding:0 10px 4px}}
+.row{{height:32px;display:flex;align-items:center;gap:10px;padding:0 10px;border-radius:9px;color:{text}}}
+.row:hover,.row:focus-visible{{background:{hover};outline:none}}
+.row .t{{flex:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}}
+.row .h{{color:{secondary};font-size:12px}}
+.row img{{width:16px;height:16px}}
+.note{{margin-top:14px;color:{secondary};font-size:12px;max-width:460px;text-align:center}}
+.err{{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;padding:24px}}
+.err .icon{{color:{secondary};margin-bottom:14px}}
+.err .icon.bad{{color:{error}}}
+.err h1{{font-size:20px;font-weight:650;letter-spacing:-.01em;margin:0 0 6px;color:{strong}}}
+.err p{{margin:0 0 4px;color:{secondary};max-width:460px;overflow-wrap:anywhere}}
+.err code{{display:inline-block;margin:10px 0 18px;font:12px "{mono}",ui-monospace,monospace;color:{secondary};background:{control};padding:2px 8px;border-radius:6px}}
+.btns{{display:flex;gap:8px}}
+.pill{{height:30px;padding:0 14px;border-radius:999px;display:inline-flex;align-items:center;font-weight:500;font-size:12.5px;background:{control_strong};color:{control_text}}}
+.pill:hover{{background:{hover}}}
+.pill.primary{{background:{fill};color:#fff}}
+.pill.primary:hover{{background:{fill_hover}}}
+.pill:focus-visible{{outline:2px solid {accent};outline-offset:2px}}
+@media (prefers-reduced-motion:reduce){{.sc{{transition:none}}.sc:hover{{transform:none}}}}
+</style></head><body>{body}</body></html>""".format(
+        csp=_PAGE_CSP, title=_esc(title), style="dark" if t["style"] == "dark" else "light", font=DEFAULT_FONT, mono=MONO_FONT,
+        text=t["text"], strong=t["text_strong"], secondary=t["text_secondary"], control_text=t["text_control"],
+        tint=t["tint"], desktop=t["desktop"], control=t["control"], control_strong=t["control_strong"], hair=t["hair"],
+        accent=t["accent_text"], card=t["card"], hover=t["control_hover"], error=t["error"],
+        fill=t["accent_fill"], fill_hover=t["accent_fill_hover"], body=body,
+    )
+
+
+def newtab_html(tokens, shortcuts=(), recent=(), private=False):
+    """The new tab page. shortcuts and recent are (url, title, icon_data_uri_or_None) tuples."""
+    secondary = tokens["text_secondary"]
+    field = (
+        '<form class="field" action="{scheme}://search" method="get">{icon}'
+        '<input name="q" placeholder="Search or enter address" aria-label="Search or enter address" autocomplete="off"></form>'
+    ).format(scheme=INTERNAL_SCHEME, icon=svg_icon("search", secondary, 18))
+    if private:
+        body = field + '<p class="note">{}<br>This is a private window. History, cookies and site data are deleted when it closes. Downloads and bookmarks are kept.</p>'.format(
+            svg_icon("eyeoff", secondary, 16))
+        return _page(tokens, "Private tab", body)
+
+    def image(icon, size):
+        return '<img src="{}" alt="">'.format(_esc(icon)) if icon else '<span class="glyph">{}</span>'.format(svg_icon("globe", secondary, size))
+
+    tiles = "".join(
+        '<a class="sc" href="{u}" title="{full}">{img}<span>{label}</span></a>'.format(
+            u=_esc(url), full=_esc(title or url), img=image(icon, 26), label=_esc(_short_label(url, title)))
+        for url, title, icon in shortcuts
+    )
+    rows = "".join(
+        '<a class="row" href="{u}">{img}<span class="t">{t}</span><span class="h">{h}</span></a>'.format(
+            u=_esc(url), img='<img src="{}" alt="">'.format(_esc(icon)) if icon else svg_icon("globe", secondary, 16),
+            t=_esc(title or url), h=_esc(url_parts(url)["host"]))
+        for url, title, icon in recent
+    )
+    body = field + '<div class="hint">Search with DuckDuckGo or type an address.</div>'
+    if tiles:
+        body += '<nav class="grid" aria-label="Frequently visited">{}</nav>'.format(tiles)
+    if rows:
+        body += '<section class="recent"><div class="grp">Recently closed</div>{}</section>'.format(rows)
+    return _page(tokens, "New Tab", body)
+
+
+def _short_label(url, title):
+    host = url_parts(url)["host"] or url
+    host = re.sub(r"^(www|docs|doc|wiki|m)\.", "", host)
+    return host.split(":")[0]
+
+
+def error_html(tokens, kind, url, code, message=""):
+    """An error page in the new tab page style. url is the page that failed; nothing here runs code."""
+    host = url_parts(url)["host"] or url
+    try_again = '<a class="pill primary" href="{}">Try again</a>'.format(_esc(url))
+    back = '<a class="pill" href="{}://back">Go back</a>'.format(INTERNAL_SCHEME)
+    if kind == "cert":
+        icon, cls = "shieldx", "icon bad"
+        title = "This connection isn’t private"
+        text = "{} sent a certificate CottonCandy can’t trust, so someone may be able to read what you send. CottonCandy never lets you continue past a bad certificate.".format(_esc(host))
+        buttons = '<a class="pill primary" href="{}://back">Go back</a>'.format(INTERNAL_SCHEME)
+    elif kind == "offline":
+        icon, cls = "wifioff", "icon"
+        title = "You’re offline"
+        text = "CottonCandy can’t reach {}. Check the network, then try again.".format(_esc(host))
+        buttons = try_again + back
+    elif kind == "dns":
+        icon, cls = "globe", "icon"
+        title = "Can’t find {}".format(_esc(host))
+        text = "The address may be mistyped, or the site may not exist."
+        buttons = try_again + back
+    else:
+        icon, cls = "alert", "icon"
+        title = "Can’t reach {}".format(_esc(host))
+        text = _esc(message) if message else "The site didn’t answer."
+        buttons = try_again + back
+    color = tokens["error"] if kind == "cert" else tokens["text_secondary"]
+    body = '<main class="err"><div class="{cls}">{icon}</div><h1>{title}</h1><p>{text}</p><code>{code}</code><div class="btns">{buttons}</div></main>'.format(
+        cls=cls, icon=svg_icon(icon, color, 28), title=title, text=text, code=_esc(code), buttons=buttons)
+    return _page(tokens, title.replace("&amp;", "&"), body)
+
+
+def internal_request(url):
+    """What a cottoncandy: URL asks for: ('newtab', None), ('search', text), ('back', None) or (None, None)."""
+    match = re.match(r"^%s://([a-z]+)/?(\?.*)?$" % INTERNAL_SCHEME, url or "")
+    if not match:
+        return None, None
+    page, query = match.group(1), match.group(2) or ""
+    if page == "search":
+        from urllib.parse import parse_qs
+
+        values = parse_qs(query[1:]).get("q", [""])
+        return "search", values[0]
+    if page in ("newtab", "back"):
+        return page, None
+    return None, None
+
+
+def stylesheet(accent="blue", style="dark"):
+    t = theme_tokens(style, accent)
+    return """
+QMainWindow, QWidget#central {{ background: {window}; }}
+QWidget {{ font-family: "{font}"; color: {text}; }}
+QWidget#tabrow, QWidget#toolbar, QWidget#findbar {{ background: {titlebar}; }}
+QWidget#toolbar {{ border-bottom: 1px solid {subtle}; }}
+QWidget#findbar {{ border-bottom: 1px solid {subtle}; }}
+QTabBar {{ background: transparent; qproperty-drawBase: 0; }}
+QTabBar::tab {{
+    background: transparent; color: {secondary}; height: 30px; padding: 0 4px 0 6px; margin: 0 2px;
+    border-radius: 9px; border: none; font-size: 12.5px;
+}}
+QTabBar::tab:hover {{ background: {hover}; color: {text}; }}
+QTabBar::tab:selected {{ background: {selected}; color: {strong}; }}
+QTabBar QToolButton {{ background: {titlebar}; border-radius: 7px; }}
+QLabel#tabtitle {{ color: {secondary}; font-size: 12.5px; }}
+QLabel#tabtitle[state="hover"] {{ color: {text}; }}
+QLabel#tabtitle[state="active"] {{ color: {strong}; }}
+QToolButton {{ background: transparent; border: none; border-radius: 15px; padding: 0; color: {control_text}; }}
+QToolButton:hover {{ background: {hover}; }}
+QToolButton:pressed, QToolButton:checked {{ background: {selected}; }}
+QToolButton#small {{ border-radius: 6px; }}
+QToolButton::menu-indicator {{ image: none; width: 0; }}
+QFrame#address {{ background: {control}; border: 1px solid transparent; border-radius: 9px; }}
+QFrame#address:hover {{ background: {control_strong}; }}
+QFrame#address[focused="true"] {{ border: 1px solid {accent_text}; background: {control}; }}
+QFrame#address QLineEdit {{ background: transparent; border: none; padding: 0 2px; font-size: 13px; }}
+QFrame#address QLabel {{ font-size: 13px; }}
+QToolButton#site {{ border-radius: 7px; }}
+QLabel#private {{
+    background: {control_strong}; color: {control_text}; border-radius: 11px; padding: 0 9px; font-size: 11.5px; font-weight: 500;
+}}
+QFrame#overlay {{ background: {panel}; border: 1px solid {hair}; border-radius: 14px; }}
+QFrame#overlay QLabel {{ background: transparent; }}
+QLabel#title {{ color: {strong}; font-weight: 600; }}
+QLabel#secondary, QLabel#group {{ color: {secondary}; }}
+QLabel#group {{ font-size: 11px; font-weight: 500; padding: 6px 4px 2px 4px; }}
+QLabel#failed {{ color: {error}; }}
+QFrame#row {{ border-radius: 9px; background: transparent; }}
+QFrame#row:hover {{ background: {hover}; }}
+QFrame#row[selected="true"] {{ background: {selected}; }}
+QFrame#details {{ background: {card}; border-radius: 9px; }}
+QFrame#tile {{ background: {control_strong}; border-radius: 9px; }}
+QPushButton {{
+    background: {control_strong}; color: {control_text}; border: none; border-radius: 12px;
+    height: 24px; padding: 0 12px; font-size: 12px; font-weight: 500;
+}}
+QPushButton:hover {{ background: {hover}; }}
+QPushButton#primary {{ background: {fill}; color: #ffffff; }}
+QPushButton#primary:hover {{ background: {fill_hover}; }}
+QPushButton#primary:pressed {{ background: {fill_pressed}; }}
+QPushButton#ghost {{ background: transparent; color: {secondary}; }}
+QPushButton#ghost:hover {{ background: {hover}; color: {text}; }}
+QPushButton#destructive {{ color: {error}; }}
+QPushButton:focus {{ outline: none; border: 2px solid {accent_text}; }}
+QPushButton#toggle:checked {{ background: {selected}; color: {strong}; }}
+QLineEdit {{
+    background: {control}; color: {text}; border: 1px solid transparent; border-radius: 9px;
+    padding: 5px 8px; selection-background-color: {fill}; selection-color: #ffffff;
+}}
+QLineEdit:hover {{ background: {control_strong}; }}
+QLineEdit:focus {{ border: 1px solid {accent_text}; }}
+QLabel#findcount {{ color: {secondary}; }}
+QLabel#findcount[none="true"] {{ color: {error}; }}
+QLabel#notsecure {{ color: {error}; font-size: 12px; padding-right: 6px; border-right: 1px solid {hair}; }}
+QLabel#bubble {{
+    background: {panel}; color: {control_text}; border: 1px solid {hair}; border-radius: 7px; padding: 3px 8px;
+}}
+QProgressBar#pageprogress {{ background: {track}; border: none; max-height: 2px; min-height: 2px; }}
+QProgressBar#pageprogress::chunk {{ background: {fill}; }}
+QProgressBar {{ background: {track}; border: none; border-radius: 2px; max-height: 4px; min-height: 4px; }}
+QProgressBar::chunk {{ background: {fill}; border-radius: 2px; }}
+QProgressBar[paused="true"]::chunk {{ background: {tertiary}; }}
+QMenu {{ background: {panel}; color: {text}; border: 1px solid {hair}; border-radius: 12px; padding: 5px; }}
+QMenu::item {{ padding: 7px 22px 7px 10px; border-radius: 7px; }}
+QMenu::item:selected {{ background: {hover}; }}
+QMenu::item:disabled {{ color: {tertiary}; }}
+QMenu::separator {{ height: 1px; background: {hair}; margin: 4px 6px; }}
+QMenu::icon {{ padding-left: 6px; }}
+QDialog {{ background: {window}; }}
+QListWidget {{ background: transparent; border: none; color: {text}; outline: none; }}
+QListWidget::item {{ padding: 6px 8px; border-radius: 7px; }}
+QListWidget::item:selected {{ background: {selected}; color: {strong}; }}
+QScrollBar:vertical {{ background: transparent; width: 8px; }}
+QScrollBar::handle:vertical {{ background: {hover}; border-radius: 4px; min-height: 24px; }}
+QScrollBar::add-line, QScrollBar::sub-line {{ height: 0; width: 0; }}
+QToolTip {{ background: {panel}; color: {text}; border: 1px solid {hair}; border-radius: 7px; padding: 4px 8px; }}
+""".format(
+        font=DEFAULT_FONT, window=t["window"], titlebar=t["titlebar"], subtle=t["subtle"], panel=t["panel"],
+        hair=t["hair"], card=t["card"], control=t["control"], control_strong=t["control_strong"],
+        hover=t["control_hover"], selected=t["selected"], track=t["track"], text=t["text"], strong=t["text_strong"],
+        control_text=t["text_control"], secondary=t["text_secondary"], tertiary=t["text_tertiary"], error=t["error"],
+        fill=t["accent_fill"], fill_hover=t["accent_fill_hover"], fill_pressed=t["accent_fill_pressed"],
+        accent_text=t["accent_text"],
+    )
 
 
 def set_default_handlers(text, desktop_id=DESKTOP_FILE, mime_types=HANDLER_TYPES):
@@ -356,77 +773,9 @@ def icon_markup(path, color, filled=False):
     ).format(fill=color if filled else "none", color=color, path=path)
 
 
-def stylesheet(accent):
-    colors = ACCENTS.get(accent, ACCENTS["blue"])
-    return """
-QMainWindow, QWidget#chrome {{ background: {titlebar}; }}
-QWidget {{ font-family: "{font}"; }}
-QTabBar {{ background: {titlebar}; }}
-QTabBar::tab {{
-    border: none; background: transparent; color: {secondary}; padding: 7px 10px; margin: 6px 2px 0 2px;
-    border-top-left-radius: 9px; border-top-right-radius: 9px; min-width: 110px; max-width: 220px;
-}}
-QTabBar::tab:selected {{ background: {window}; color: {text}; }}
-QTabBar::tab:hover:!selected {{ background: rgba(255, 255, 255, 0.05); }}
-QWidget#toolbar {{ background: {window}; }}
-QToolButton {{ background: transparent; border: none; border-radius: 7px; padding: 5px; color: {control}; }}
-QToolButton:hover {{ background: rgba(255, 255, 255, 0.12); }}
-QToolButton:checked {{ background: rgba(255, 255, 255, 0.14); }}
-QToolButton::menu-indicator {{ image: none; width: 0; }}
-QLineEdit {{
-    background: rgba(255, 255, 255, 0.065); color: {text}; border: 1px solid transparent;
-    border-radius: 9px; padding: 5px 8px; selection-background-color: {fill}; selection-color: #ffffff;
-}}
-QLineEdit:focus {{ border: 1px solid {fg}; background: {background}; }}
-QLabel {{ color: {text}; }}
-QLabel#secondary {{ color: {secondary}; }}
-QLabel#private {{ color: {fg}; padding: 0 6px; font-weight: 600; }}
-QLabel#bubble {{
-    background: {panel}; color: {control}; border: 1px solid rgba(255, 255, 255, 0.08);
-    border-radius: 7px; padding: 3px 8px;
-}}
-QProgressBar#progress {{ background: {window}; border: none; max-height: 2px; min-height: 2px; }}
-QProgressBar#progress::chunk {{ background: {fg}; }}
-QProgressBar {{ background: rgba(255, 255, 255, 0.12); border: none; border-radius: 2px; max-height: 4px; }}
-QProgressBar::chunk {{ background: {fg}; border-radius: 2px; }}
-QWidget#findbar {{ background: {window}; }}
-QMenu {{
-    background: {panel}; color: {text}; border: 1px solid rgba(255, 255, 255, 0.08);
-    border-radius: 9px; padding: 4px;
-}}
-QMenu::item {{ padding: 6px 22px 6px 12px; border-radius: 7px; }}
-QMenu::item:selected {{ background: rgba(255, 255, 255, 0.12); }}
-QMenu::item:disabled {{ color: {tertiary}; }}
-QMenu::separator {{ height: 1px; background: rgba(255, 255, 255, 0.08); margin: 4px 6px; }}
-QDialog, QFrame#downloads {{ background: {window}; color: {text}; }}
-QFrame#downloads {{ border: 1px solid rgba(255, 255, 255, 0.08); border-radius: 12px; }}
-QListWidget {{ background: transparent; border: none; color: {text}; outline: none; }}
-QListWidget::item {{ padding: 6px 8px; border-radius: 7px; }}
-QListWidget::item:selected {{ background: rgba(255, 255, 255, 0.14); color: {text}; }}
-QPushButton {{
-    background: rgba(255, 255, 255, 0.065); color: {control}; border: none;
-    border-radius: 7px; padding: 6px 12px;
-}}
-QPushButton:hover {{ background: rgba(255, 255, 255, 0.12); }}
-QPushButton#suggested {{ background: {fill}; color: #ffffff; }}
-QPushButton#destructive {{ color: {error}; }}
-QScrollBar:vertical {{ background: transparent; width: 8px; }}
-QScrollBar::handle:vertical {{ background: rgba(255, 255, 255, 0.12); border-radius: 4px; min-height: 24px; }}
-QScrollBar::add-line, QScrollBar::sub-line {{ height: 0; }}
-""".format(
-        titlebar=TITLEBAR,
-        window=WINDOW,
-        panel=PANEL,
-        background=BACKGROUND,
-        text=TEXT,
-        control=TEXT_CONTROL,
-        secondary=TEXT_SECONDARY,
-        tertiary=TEXT_TERTIARY,
-        error=ERROR,
-        font=DEFAULT_FONT,
-        fill=colors["fill"],
-        fg=colors["fg"],
-    )
+def _host(url):
+    match = re.match(r"^[A-Za-z][A-Za-z0-9+.-]*://([^/?#]*)", url or "")
+    return match.group(1).rsplit("@", 1)[-1].lower() if match else ""
 
 
 def _like(text):
@@ -434,7 +783,7 @@ def _like(text):
 
 
 class Store:
-    """History and bookmarks in SQLite. Only http, https and file pages are stored."""
+    """History, bookmarks and site icons in SQLite. Only http, https and file pages are stored."""
 
     SCHEMA_VERSION = 1
 
@@ -457,6 +806,11 @@ class Store:
                 url TEXT PRIMARY KEY,
                 title TEXT NOT NULL DEFAULT '',
                 created INTEGER NOT NULL
+            );
+            CREATE TABLE IF NOT EXISTS icons (
+                host TEXT PRIMARY KEY,
+                png BLOB NOT NULL,
+                updated INTEGER NOT NULL
             );
             """
         )
@@ -546,6 +900,59 @@ class Store:
         row = self._db.execute("SELECT 1 FROM bookmarks WHERE url = ?", (url,)).fetchone()
         return row is not None
 
+    def bookmark_matches(self, text, limit=5):
+        """(url, title) bookmarks whose address or title contains text."""
+        pattern = _like((text or "").strip())
+        rows = self._db.execute(
+            "SELECT url, title FROM bookmarks WHERE url LIKE ? ESCAPE '\\' OR title LIKE ? ESCAPE '\\' "
+            "ORDER BY created DESC LIMIT ?",
+            (pattern, pattern, limit),
+        )
+        return rows.fetchall()
+
+    def history_matches(self, text, limit=10):
+        """(url, title) history entries containing text, most visited first."""
+        pattern = _like((text or "").strip())
+        rows = self._db.execute(
+            "SELECT url, title FROM history WHERE url LIKE ? ESCAPE '\\' OR title LIKE ? ESCAPE '\\' "
+            "ORDER BY visits DESC, last_visit DESC LIMIT ?",
+            (pattern, pattern, limit),
+        )
+        return rows.fetchall()
+
+    def top_sites(self, limit=8):
+        """(url, title) of the most visited web pages, one per host, for the new tab page."""
+        rows = self._db.execute(
+            "SELECT url, title FROM history ORDER BY visits DESC, last_visit DESC LIMIT 200"
+        ).fetchall()
+        seen, result = set(), []
+        for url, title in rows:
+            host = _host(url)
+            if not is_web_url(url) or not host or host in seen:
+                continue
+            seen.add(host)
+            result.append((url, title))
+            if len(result) == limit:
+                break
+        return result
+
+    def set_icon(self, url, png, now=None):
+        host = _host(url)
+        if not png or not host or not is_web_url(url) or len(png) > 256 * 1024:
+            return False
+        now = int(time.time()) if now is None else now
+        with self._db:
+            self._db.execute(
+                "INSERT INTO icons (host, png, updated) VALUES (?, ?, ?) "
+                "ON CONFLICT (host) DO UPDATE SET png = excluded.png, updated = excluded.updated",
+                (host, png, now),
+            )
+        return True
+
+    def icon_for(self, url):
+        row = self._db.execute("SELECT png FROM icons WHERE host = ?", (_host(url),)).fetchone()
+        return bytes(row[0]) if row else None
+
     def bookmarks(self, query=""):
         rows = self._db.execute(
             """
@@ -573,22 +980,29 @@ def main(argv=None):
         )
         return 1
 
-    from PySide6.QtCore import QByteArray, QEvent, QSize, QStandardPaths, QStringListModel, Qt, QTimer, QUrl
-    from PySide6.QtGui import QAction, QColor, QDesktopServices, QFont, QIcon, QKeySequence, QPainter, QPalette, QPixmap
+    import base64
+
+    from PySide6.QtCore import QBuffer, QByteArray, QEvent, QFileSystemWatcher, QIODevice, QPoint, QPointF, QRectF, QSize, QStandardPaths, Qt, QTimer, QUrl
+    from PySide6.QtGui import QAction, QColor, QDesktopServices, QFont, QIcon, QKeySequence, QPainter, QPalette, QPen, QPixmap
     from PySide6.QtNetwork import QLocalServer, QLocalSocket
     from PySide6.QtSvg import QSvgRenderer
     from PySide6.QtWebEngineCore import (
         QWebEngineDownloadRequest,
+        QWebEngineLoadingInfo,
         QWebEnginePage,
         QWebEngineProfile,
         QWebEngineSettings,
+        QWebEngineUrlRequestJob,
+        QWebEngineUrlScheme,
+        QWebEngineUrlSchemeHandler,
     )
     from PySide6.QtWebEngineWidgets import QWebEngineView
     from PySide6.QtWidgets import (
         QApplication,
-        QCompleter,
         QDialog,
         QFrame,
+        QGraphicsDropShadowEffect,
+        QGridLayout,
         QHBoxLayout,
         QLabel,
         QLineEdit,
@@ -599,27 +1013,60 @@ def main(argv=None):
         QMessageBox,
         QProgressBar,
         QPushButton,
+        QSizePolicy,
+        QStackedLayout,
         QStackedWidget,
         QStyleFactory,
         QTabBar,
         QToolButton,
         QVBoxLayout,
         QWidget,
+        QWidgetAction,
     )
 
-    try:
-        with open(os.path.join(config_home(), "grace", "desktop.conf"), encoding="utf-8") as handle:
-            accent = grace_accent(handle.read())
-    except OSError:
-        accent = "blue"
-    accent_fg = ACCENTS[accent]["fg"]
+    # cottoncandy: serves the new tab page. It must be registered before the application exists.
+    scheme = QWebEngineUrlScheme(INTERNAL_SCHEME.encode())
+    scheme.setSyntax(QWebEngineUrlScheme.Syntax.Host)
+    scheme.setFlags(QWebEngineUrlScheme.Flag.SecureScheme | QWebEngineUrlScheme.Flag.LocalScheme)
+    QWebEngineUrlScheme.registerScheme(scheme)
+
+    conf_path = os.path.join(config_home(), "grace", "desktop.conf")
+    theme = {"style": "dark", "accent": "blue"}
+
+    def read_grace():
+        """Pick up GraceOS's Dark Style and accent; True if either changed."""
+        try:
+            with open(conf_path, encoding="utf-8") as handle:
+                text = handle.read()
+        except OSError:
+            text = ""
+        new = {"style": grace_style(text), "accent": grace_accent(text)}
+        changed = new != theme
+        theme.update(new)
+        return changed
+
+    read_grace()
+
+    def tok():
+        return theme_tokens(theme["style"], theme["accent"])
+
+    def qcolor(value):
+        match = re.match(r"rgba\(([\d.]+),\s*([\d.]+),\s*([\d.]+),\s*([\d.]+)\)", value)
+        if match:
+            red, green, blue, alpha = match.groups()
+            return QColor(int(red), int(green), int(blue), round(float(alpha) * 255))
+        return QColor(value)
+
     icon_cache = {}
 
-    def icon(name, color=TEXT_CONTROL, filled=False):
-        key = (name, color, filled)
+    def icon(name, role="text_control", filled=False):
+        """A line icon in a theme color (a token name such as 'accent_text', or a hex color)."""
+        tokens = tok()
+        color = tokens.get(role, role)
+        key = (name, color, filled, tokens["text_tertiary"])
         if key not in icon_cache:
             result = QIcon()
-            for mode, mode_color in ((QIcon.Mode.Normal, color), (QIcon.Mode.Disabled, TEXT_TERTIARY)):
+            for mode, mode_color in ((QIcon.Mode.Normal, color), (QIcon.Mode.Disabled, tokens["text_tertiary"])):
                 renderer = QSvgRenderer(QByteArray(icon_markup(ICONS[name], mode_color, filled).encode("utf-8")))
                 pixmap = QPixmap(48, 48)
                 pixmap.fill(Qt.GlobalColor.transparent)
@@ -630,27 +1077,282 @@ def main(argv=None):
             icon_cache[key] = result
         return icon_cache[key]
 
-    def tool_button(icon_name, tooltip, callback=None):
+    def set_icon(widget, name, role="text_control", filled=False):
+        """Give a button a themed icon that follows later theme changes."""
+        widget._cc_icon = (name, role, filled)
+        widget.setIcon(icon(name, role, filled))
+
+    def tool_button(icon_name, tooltip, callback=None, size=30, role="text_control"):
         button = QToolButton()
-        button.setIcon(icon(icon_name))
-        button.setIconSize(QSize(18, 18))
+        set_icon(button, icon_name, role)
+        button.setFixedSize(size, size)
+        button.setIconSize(QSize(16, 16) if size >= 28 else QSize(14, 14))
+        if size < 28:
+            button.setObjectName("small")
         button.setToolTip(tooltip)
-        button.setAutoRaise(True)
-        button.setFocusPolicy(Qt.FocusPolicy.NoFocus)
+        button.setAccessibleName(tooltip.split(" (")[0])
+        button.setFocusPolicy(Qt.FocusPolicy.TabFocus)
         if callback is not None:
-            button.clicked.connect(callback)
+            button.clicked.connect(lambda _checked=False: callback())
         return button
 
+    def repolish(widget):
+        widget.style().unpolish(widget)
+        widget.style().polish(widget)
+
+    spinner_cache = {}
+
+    def spinner_frame(step):
+        """The loading spinner (accent text color on the track), one of 12 frames."""
+        tokens = tok()
+        key = (step % 12, tokens["accent_text"], tokens["track"])
+        if key not in spinner_cache:
+            pixmap = QPixmap(32, 32)
+            pixmap.fill(Qt.GlobalColor.transparent)
+            painter = QPainter(pixmap)
+            painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+            rect = QRectF(5, 5, 22, 22)
+            painter.setPen(QPen(qcolor(tokens["track"]), 3.2))
+            painter.drawEllipse(rect)
+            pen = QPen(QColor(tokens["accent_text"]), 3.2)
+            pen.setCapStyle(Qt.PenCapStyle.RoundCap)
+            painter.setPen(pen)
+            painter.drawArc(rect, (90 - step % 12 * 30) * 16, -90 * 16)
+            painter.end()
+            spinner_cache[key] = QIcon(pixmap)
+        return spinner_cache[key]
+
+    def png_bytes(qicon):
+        pixmap = qicon.pixmap(32, 32)
+        if pixmap.isNull():
+            return None
+        buffer = QBuffer()
+        buffer.open(QIODevice.OpenModeFlag.WriteOnly)
+        pixmap.save(buffer, "PNG")
+        return bytes(buffer.data())
+
+    def data_uri(png):
+        return "data:image/png;base64," + base64.b64encode(png).decode("ascii") if png else None
+
+    def shadow(widget):
+        effect = QGraphicsDropShadowEffect(widget)
+        effect.setBlurRadius(34)
+        effect.setOffset(0, 14)
+        effect.setColor(qcolor(tok()["shadow"]))
+        widget.setGraphicsEffect(effect)
+
+    class TrafficLights(QWidget):
+        """Close, minimize, maximize on the left; glyphs appear while hovered; gray when the window is inactive."""
+
+        def __init__(self, window):
+            super().__init__()
+            self._window = window
+            self._hover = False
+            self.setFixedSize(58, 30)
+            self.setAccessibleName("Window controls: close, minimize, maximize")
+            self.setToolTip("Close · Minimize · Maximize")
+
+        def _centers(self):
+            return [QPoint(9 + i * 18, self.height() // 2) for i in range(3)]
+
+        def enterEvent(self, event):
+            self._hover = True
+            self.update()
+
+        def leaveEvent(self, event):
+            self._hover = False
+            self.update()
+
+        def paintEvent(self, event):
+            painter = QPainter(self)
+            painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+            active = self._window.isActiveWindow()
+            for index, center in enumerate(self._centers()):
+                fill = QColor(TRAFFIC_LIGHTS[index]) if active or self._hover else qcolor(tok()["control_hover"])
+                painter.setPen(QPen(QColor(0, 0, 0, 72), 0.5))
+                painter.setBrush(fill)
+                painter.drawEllipse(QPointF(center), 5.5, 5.5)
+                if self._hover:
+                    pen = QPen(QColor(0, 0, 0, 140), 1.3)
+                    pen.setCapStyle(Qt.PenCapStyle.RoundCap)
+                    painter.setPen(pen)
+                    x, y = center.x(), center.y()
+                    if index == 0:
+                        painter.drawLine(QPointF(x - 2.5, y - 2.5), QPointF(x + 2.5, y + 2.5))
+                        painter.drawLine(QPointF(x + 2.5, y - 2.5), QPointF(x - 2.5, y + 2.5))
+                    else:
+                        painter.drawLine(QPointF(x - 3, y), QPointF(x + 3, y))
+                        if index == 2:
+                            painter.drawLine(QPointF(x, y - 3), QPointF(x, y + 3))
+            painter.end()
+
+        def mousePressEvent(self, event):
+            for index, center in enumerate(self._centers()):
+                if (event.position().toPoint() - center).manhattanLength() <= 9:
+                    if index == 0:
+                        self._window.close()
+                    elif index == 1:
+                        self._window.showMinimized()
+                    else:
+                        self._window.toggle_maximized()
+                    return
+            super().mousePressEvent(event)
+
+    class DragArea(QWidget):
+        """Empty space in the tab row: drag to move the window, double-click to maximize."""
+
+        def __init__(self, window):
+            super().__init__()
+            self._window = window
+
+        def mousePressEvent(self, event):
+            if event.button() == Qt.MouseButton.LeftButton and self._window.windowHandle() is not None:
+                self._window.windowHandle().startSystemMove()
+
+        def mouseDoubleClickEvent(self, event):
+            self._window.toggle_maximized()
+
+    class CottonTabBar(QTabBar):
+        def __init__(self, window):
+            super().__init__()
+            self._window = window
+            self.hovered = -1
+            self.setDocumentMode(True)
+            self.setDrawBase(False)
+            self.setMovable(True)
+            self.setExpanding(False)
+            self.setUsesScrollButtons(True)
+            self.setElideMode(Qt.TextElideMode.ElideRight)
+            self.setIconSize(QSize(16, 16))
+            self.setFocusPolicy(Qt.FocusPolicy.NoFocus)
+            self.setMouseTracking(True)
+
+        def tabSizeHint(self, index):
+            tab = self._window.tab_at(index)
+            if tab is not None and tab.icon_only:
+                return QSize(36, 30)
+            return QSize(200, 30)
+
+        def minimumTabSizeHint(self, index):
+            return self.tabSizeHint(index)
+
+        def mouseMoveEvent(self, event):
+            index = self.tabAt(event.position().toPoint())
+            if index != self.hovered:
+                self.hovered = index
+                self._window.refresh_tab_buttons()
+            super().mouseMoveEvent(event)
+
+        def leaveEvent(self, event):
+            self.hovered = -1
+            self._window.refresh_tab_buttons()
+            super().leaveEvent(event)
+
+        def mousePressEvent(self, event):
+            index = self.tabAt(event.position().toPoint())
+            if event.button() == Qt.MouseButton.MiddleButton and index >= 0:
+                self._window.close_tab_at(index)
+                return
+            if event.button() == Qt.MouseButton.RightButton and index >= 0:
+                self._window.tab_menu(index, event.globalPosition().toPoint())
+                return
+            super().mousePressEvent(event)
+
+    class TabLabel(QWidget):
+        """Icon and title on the left of a tab (QTabBar centers its own text)."""
+
+        def __init__(self):
+            super().__init__()
+            self.icon = QLabel()
+            self.icon.setFixedSize(16, 16)
+            self.title = QLabel()
+            self.title.setObjectName("tabtitle")
+            self.title.setSizePolicy(QSizePolicy.Policy.Ignored, QSizePolicy.Policy.Preferred)
+            self._text = ""
+            row = QHBoxLayout(self)
+            row.setContentsMargins(0, 0, 0, 0)
+            row.setSpacing(8)
+            row.addWidget(self.icon)
+            row.addWidget(self.title, 1)
+            self.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents)
+
+        def set_content(self, qicon, text, state, width):
+            self.icon.setPixmap(qicon.pixmap(16, 16))
+            self.title.setVisible(width > 16)
+            self.setFixedWidth(width)
+            if text != self._text:
+                self._text = text
+            metrics = self.title.fontMetrics()
+            self.title.setText(metrics.elidedText(text, Qt.TextElideMode.ElideRight, max(0, width - 24)))
+            if self.title.property("state") != state:
+                self.title.setProperty("state", state)
+                repolish(self.title)
+
+    class TabButtons(QWidget):
+        """The audio and close buttons on the right of a tab."""
+
+        def __init__(self, window, tab):
+            super().__init__()
+            self.audio = tool_button("speaker", "Mute tab", lambda: window.toggle_mute(tab), size=20, role="accent_text")
+            self.close = tool_button("x", "Close tab (Ctrl+W)", lambda: window.close_tab(tab), size=20, role="text_secondary")
+            self.audio.setFocusPolicy(Qt.FocusPolicy.NoFocus)
+            self.close.setFocusPolicy(Qt.FocusPolicy.NoFocus)
+            row = QHBoxLayout(self)
+            row.setContentsMargins(0, 0, 0, 0)
+            row.setSpacing(0)
+            row.addWidget(self.audio)
+            row.addWidget(self.close)
+
+    class CottonTab:
+        def __init__(self, window, profile):
+            self.view = QWebEngineView()
+            self.page = CottonPage(profile, window, self.view)
+            self.view.setPage(self.page)
+            self.buttons = TabButtons(window, self)
+            self.label = TabLabel()
+            self.devtools = None
+            self.loading = False
+            self.pinned = False
+            self.crashed = False
+            self.audible = False
+            self.icon_only = False
+            self.title = "New Tab"
+            self.error_url = None
+            self.favicon = QIcon()
+            self.favicon_host = ""
+            self.permissions = []
+
+        def url(self):
+            return self.view.url().toString()
+
     class CottonPage(QWebEnginePage):
-        """A page that refuses unknown URL schemes and opens new windows as tabs of its own window."""
+        """Refuses unknown URL schemes, opens new windows as tabs, and handles cottoncandy: actions."""
 
         def __init__(self, profile, window, parent=None):
             super().__init__(profile, parent)
             self._window = window
+            self.error_page_pending = False
 
         def acceptNavigationRequest(self, url, navigation_type, is_main_frame):
             types = QWebEnginePage.NavigationType
             text = url.toString()
+            if url.scheme() == "data" and is_main_frame and self.error_page_pending:
+                self.error_page_pending = False  # the error page CottonCandy itself just set
+                return True
+            if url.scheme() == INTERNAL_SCHEME and is_main_frame:
+                kind, value = internal_request(text)
+                from_internal = self.url().scheme() == INTERNAL_SCHEME
+                if kind == "newtab" and navigation_type in (types.NavigationTypeTyped, types.NavigationTypeReload,
+                                                            types.NavigationTypeBackForward, types.NavigationTypeOther):
+                    return True  # browser-initiated; pages can't link here (that's LinkClicked or a form)
+                if kind == "search" and from_internal:
+                    target = resolve_input(value)
+                    if target:
+                        QTimer.singleShot(0, lambda: self.load(QUrl(target)))
+                    return False
+                if kind == "back":
+                    QTimer.singleShot(0, lambda: self.triggerAction(QWebEnginePage.WebAction.Back))
+                    return False
             decision = navigation_decision(
                 text,
                 is_main_frame,
@@ -661,7 +1363,7 @@ def main(argv=None):
                 QDesktopServices.openUrl(url)
                 return False
             if decision == "block":
-                print("cottoncandy: blocked a navigation to {!r}".format(text[:200]), file=sys.stderr)
+                print("cottoncandy: blocked a navigation to {!r} ({})".format(text[:200], navigation_type.name), file=sys.stderr)
                 return False
             return True
 
@@ -670,143 +1372,410 @@ def main(argv=None):
             tab = self._window.add_tab(None, focus=not background, after=self)
             return tab.page
 
-    class CottonTab:
-        def __init__(self, window, profile):
-            self.view = QWebEngineView()
-            self.page = CottonPage(profile, window, self.view)
-            self.view.setPage(self.page)
-            self.devtools = None
-            self.loading = False
+    class SchemeHandler(QWebEngineUrlSchemeHandler):
+        """Serves cottoncandy://newtab, built from the theme, local history and favicons. Nothing else."""
 
-    class AddressBar(QLineEdit):
-        def focusInEvent(self, event):
-            super().focusInEvent(event)
-            # Select everything when the user comes to the bar, but not when the suggestions
-            # popup hands focus back mid-typing (PopupFocusReason): that would eat the next key.
-            reason = event.reason()
-            if reason == Qt.FocusReason.MouseFocusReason:
-                QTimer.singleShot(0, self.selectAll)  # after the click's own cursor placement
-            elif reason in (Qt.FocusReason.TabFocusReason, Qt.FocusReason.BacktabFocusReason,
-                            Qt.FocusReason.ShortcutFocusReason):
-                self.selectAll()
+        def __init__(self, application, private):
+            super().__init__(application)
+            self._application = application
+            self._private = private
+
+        def requestStarted(self, job):
+            kind, _value = internal_request(job.requestUrl().toString())
+            if kind != "newtab":
+                job.fail(QWebEngineUrlRequestJob.Error.UrlNotFound)
+                return
+            store = self._application.store
+            shortcuts = [(url, title, data_uri(store.icon_for(url))) for url, title in store.top_sites(8)]
+            recent = [(url, title, data_uri(store.icon_for(url))) for url, title in self._application.recently_closed[:3]]
+            html = newtab_html(tok(), shortcuts, recent, self._private)
+            buffer = QBuffer(job)
+            buffer.setData(html.encode("utf-8"))
+            buffer.open(QIODevice.OpenModeFlag.ReadOnly)
+            job.reply(b"text/html", buffer)
+
+    class ClickLabel(QLabel):
+        def __init__(self, on_click):
+            super().__init__()
+            self._on_click = on_click
+            self.setCursor(Qt.CursorShape.IBeamCursor)
+
+        def mousePressEvent(self, event):
+            self._on_click()
+
+    class AddressEdit(QLineEdit):
+        def __init__(self, bar):
+            super().__init__()
+            self._bar = bar
 
         def keyPressEvent(self, event):
-            if event.key() == Qt.Key.Key_Escape:
-                self.window().restore_address()
+            key = event.key()
+            if key == Qt.Key.Key_Escape:
+                self._bar.cancel()
+                return
+            if key in (Qt.Key.Key_Down, Qt.Key.Key_Up):
+                self._bar.window_.move_suggestion(1 if key == Qt.Key.Key_Down else -1)
                 return
             super().keyPressEvent(event)
 
-    class DownloadRow(QWidget):
-        def __init__(self, request, path, on_finished):
+        def focusOutEvent(self, event):
+            super().focusOutEvent(event)
+            if event.reason() != Qt.FocusReason.PopupFocusReason:
+                self._bar.finish()
+
+    class AddressBar(QFrame):
+        """Site icon, then the host in text color and the rest in secondary; the full URL while editing."""
+
+        def __init__(self, window):
             super().__init__()
-            self._request = request
-            self._path = path
-            self._on_finished = on_finished
-            self._name = QLabel(os.path.basename(path))
-            self._name.setStyleSheet("font-weight: 600;")
-            self._status = QLabel()
-            self._status.setObjectName("secondary")
-            self._progress = QProgressBar()
-            self._progress.setTextVisible(False)
-            self._cancel = tool_button("x", "Cancel", request.cancel)
-            self._folder = tool_button("folder", "Show in folder", self._show_folder)
+            self.window_ = window
+            self.setObjectName("address")
+            self.setFixedHeight(30)
+            self.editing = False
+            self._url = ""
+            self.site = tool_button("search", "Site information", window.toggle_site_info, size=26, role="text_secondary")
+            self.site.setObjectName("site")
+            self.site.setFixedSize(26, 24)
+            self.notsecure = QLabel("Not secure")
+            self.notsecure.setObjectName("notsecure")
+            self.notsecure.hide()
+            self.display = ClickLabel(lambda: self.begin(select_all=True))
+            self.display.setTextFormat(Qt.TextFormat.RichText)
+            self.display.setMinimumWidth(40)
+            self.display.setSizePolicy(QSizePolicy.Policy.Ignored, QSizePolicy.Policy.Preferred)
+            self.edit = AddressEdit(self)
+            self.edit.setPlaceholderText("Search or enter address")
+            self.edit.setAccessibleName("Address and search bar")
+            self.edit.returnPressed.connect(window.address_entered)
+            self.edit.textEdited.connect(window.update_suggestions)
+            holder = QWidget()
+            self.stack = QStackedLayout(holder)
+            self.stack.addWidget(self.display)
+            self.stack.addWidget(self.edit)
+            self.star = tool_button("star", "Bookmark this page (Ctrl+D)", window.toggle_bookmark, size=24)
+            row = QHBoxLayout(self)
+            row.setContentsMargins(2, 0, 3, 0)
+            row.setSpacing(4)
+            row.addWidget(self.site)
+            row.addWidget(self.notsecure)
+            row.addWidget(holder, 1)
+            row.addWidget(self.star)
 
-            text = QVBoxLayout()
-            text.setSpacing(3)
-            text.addWidget(self._name)
-            text.addWidget(self._progress)
-            text.addWidget(self._status)
-            layout = QHBoxLayout(self)
-            layout.setContentsMargins(8, 6, 4, 6)
-            layout.addLayout(text, 1)
-            layout.addWidget(self._cancel)
-            layout.addWidget(self._folder)
+        def set_url(self, url, bookmarked=False):
+            self._url = url
+            parts = url_parts(url)
+            tokens = tok()
+            kind = parts["kind"]
+            names = {"secure": ("lock", "text_secondary", "The connection to this site is encrypted"),
+                     "insecure": ("warning", "error", "Not secure: this page is sent unencrypted"),
+                     "local": ("info", "text_secondary", "A page on this computer (not encrypted, never leaves it)"),
+                     "file": ("file", "text_secondary", "A file on this computer")}
+            name, role, tip = names.get(kind, ("search", "text_secondary", "Search or enter address"))
+            set_icon(self.site, name, role)
+            self.site.setToolTip(tip)
+            self.notsecure.setVisible(kind == "insecure" and not self.editing)
+            if kind == "empty":
+                html = '<span style="color:{}">Search or enter address</span>'.format(tokens["text_secondary"])
+            else:
+                html = '<span style="color:{}">{}</span><span style="color:{}">{}</span>'.format(
+                    tokens["text"], _esc(parts["host"]), tokens["text_secondary"], _esc(parts["rest"]))
+            self.display.setText(html)
+            self.star.setVisible(is_bookmarkable(url))
+            set_icon(self.star, "star", "accent_text" if bookmarked else "text_control", filled=bookmarked)
+            self.star.setToolTip("Remove bookmark (Ctrl+D)" if bookmarked else "Bookmark this page (Ctrl+D)")
+            if self.editing and not self.edit.isModified():
+                text = "" if kind == "empty" else url
+                if self.edit.text() != text:
+                    self.edit.setText(text)
+                    self.edit.selectAll()  # still replaced by whatever is typed next
 
-            request.receivedBytesChanged.connect(self._refresh)
-            request.totalBytesChanged.connect(self._refresh)
-            request.stateChanged.connect(self._refresh)
-            self._refresh()
+        def begin(self, select_all=True, text=None):
+            self.editing = True
+            self.notsecure.hide()
+            self.edit.setText(text if text is not None else ("" if url_parts(self._url)["kind"] == "empty" else self._url))
+            self.edit.setModified(text is not None)
+            self.stack.setCurrentWidget(self.edit)
+            self.setProperty("focused", True)
+            repolish(self)
+            self.edit.setFocus(Qt.FocusReason.ShortcutFocusReason)
+            if select_all:
+                self.edit.selectAll()
+            if text:
+                self.window_.update_suggestions(text)
 
-        def _refresh(self, *_args):
+        def finish(self):
+            if not self.editing:
+                return
+            self.editing = False
+            self.stack.setCurrentWidget(self.display)
+            self.setProperty("focused", False)
+            repolish(self)
+            self.window_.hide_suggestions()
+            self.set_url(self._url, self.window_.application().store.is_bookmarked(self._url))
+
+        def cancel(self):
+            self.finish()
+            self.window_.focus_page()
+
+    class Overlay(QFrame):
+        """A popover card drawn inside the window (panel surface, hairline, shadow), anchored to a control."""
+
+        def __init__(self, window, width):
+            super().__init__(window.centralWidget())
+            self.window_ = window
+            self.setObjectName("overlay")
+            self.setFixedWidth(width)
+            self.anchor = None
+            shadow(self)
+            self.hide()
+
+        def showEvent(self, event):
+            super().showEvent(event)
+            self.window_.sync_scrim()
+
+        def hideEvent(self, event):
+            super().hideEvent(event)
+            self.window_.sync_scrim()
+
+        def keyPressEvent(self, event):
+            # Enter and Esc on a permission card mean Deny; only a click (or Space) on Allow once allows.
+            if getattr(self, "kind", None) == "permission" and event.key() in (Qt.Key.Key_Return, Qt.Key.Key_Enter, Qt.Key.Key_Escape):
+                self.window_.dismiss_overlays(escape=True)
+                return
+            super().keyPressEvent(event)
+
+        def show_at(self, anchor, align="left"):
+            self.anchor = anchor
+            # Widgets added to an already visible popover start hidden; show all but the deliberately hidden ones.
+            for child in self.findChildren(QWidget, options=Qt.FindChildOption.FindDirectChildrenOnly):
+                if not child.testAttribute(Qt.WidgetAttribute.WA_WState_ExplicitShowHide):
+                    child.show()
+            self.adjustSize()
+            parent = self.parentWidget()
+            top_left = anchor.mapTo(parent, QPoint(0, anchor.height() + 6))
+            if align == "right":
+                x = anchor.mapTo(parent, QPoint(anchor.width(), 0)).x() - self.width()
+            else:
+                x = top_left.x() - 1
+            x = max(6, min(x, parent.width() - self.width() - 6))
+            self.move(x, top_left.y())
+            self.show()
+            self.raise_()
+
+    def clear_layout(layout):
+        while layout.count():
+            item = layout.takeAt(0)
+            if item.widget() is not None:
+                item.widget().deleteLater()
+            elif item.layout() is not None:
+                clear_layout(item.layout())
+
+    def label(text, name=None, wrap=False):
+        widget = QLabel(text)
+        if name:
+            widget.setObjectName(name)
+        widget.setWordWrap(wrap)
+        return widget
+
+    def icon_label(qicon, size=16):
+        widget = QLabel()
+        widget.setPixmap(qicon.pixmap(size, size))
+        widget.setFixedSize(size, size)
+        return widget
+
+    class Scrim(QWidget):
+        """Transparent layer under open popovers: a click outside closes them."""
+
+        def __init__(self, window):
+            super().__init__(window.centralWidget())
+            self._window = window
+            self.hide()
+
+        def mousePressEvent(self, event):
+            self._window.dismiss_overlays()
+
+    class EdgeGrip(QWidget):
+        """A thin strip on a window edge: frameless windows still resize (Hyprland tiles them anyway)."""
+
+        def __init__(self, window, edges, cursor):
+            super().__init__(window.centralWidget())
+            self._window = window
+            self.edges = edges
+            self.setCursor(cursor)
+
+        def mousePressEvent(self, event):
+            handle = self._window.windowHandle()
+            if handle is not None and event.button() == Qt.MouseButton.LeftButton:
+                handle.startSystemResize(self.edges)
+
+    class Row(QFrame):
+        """A 34 px list row (icon, title, secondary text, tail) that calls back when clicked."""
+
+        def __init__(self, qicon, title, sub="", tail="", on_click=None):
+            super().__init__()
+            self.setObjectName("row")
+            self.setFixedHeight(34)
+            self._on_click = on_click
+            row = QHBoxLayout(self)
+            row.setContentsMargins(10, 0, 10, 0)
+            row.setSpacing(10)
+            row.addWidget(icon_label(qicon))
+            text = QLabel()
+            text.setTextFormat(Qt.TextFormat.RichText)
+            tokens = tok()
+            text.setText('<span style="color:{}">{}</span>{}'.format(
+                tokens["text"], _esc(title), '<span style="color:{}"> · {}</span>'.format(tokens["text_secondary"], _esc(sub)) if sub else ""))
+            text.setSizePolicy(QSizePolicy.Policy.Ignored, QSizePolicy.Policy.Preferred)
+            row.addWidget(text, 1)
+            if tail:
+                row.addWidget(label(tail, "secondary"))
+
+        def set_selected(self, selected):
+            self.setProperty("selected", selected)
+            repolish(self)
+
+        def mousePressEvent(self, event):
+            if self._on_click is not None:
+                self._on_click()
+
+    class DownloadButton(QToolButton):
+        """The toolbar's download button; a thin accent ring shows the progress of running downloads."""
+
+        def __init__(self, callback):
+            super().__init__()
+            set_icon(self, "download")
+            self.setFixedSize(30, 30)
+            self.setIconSize(QSize(16, 16))
+            self.setToolTip("Downloads (Ctrl+Shift+Y)")
+            self.setAccessibleName("Downloads")
+            self.progress = None
+            self.clicked.connect(lambda _checked=False: callback())
+
+        def set_progress(self, fraction):
+            if fraction != self.progress:
+                self.progress = fraction
+                self.update()
+
+        def paintEvent(self, event):
+            super().paintEvent(event)
+            if self.progress is None:
+                return
+            painter = QPainter(self)
+            painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+            rect = QRectF(3.5, 3.5, self.width() - 7, self.height() - 7)
+            painter.setPen(QPen(qcolor(tok()["track"]), 1.5))
+            painter.drawEllipse(rect)
+            painter.setPen(QPen(QColor(tok()["accent_fill"]), 1.5))
+            painter.drawArc(rect, 90 * 16, -int(360 * 16 * max(0.02, self.progress)))
+            painter.end()
+
+    class Download:
+        """A download and what's needed to show it: its final path and recent speed samples."""
+
+        def __init__(self, request, path):
+            self.request = request
+            self.path = path
+            self.samples = [(time.monotonic(), 0)]
+
+        def running(self):
             states = QWebEngineDownloadRequest.DownloadState
-            state = self._request.state()
-            received = self._request.receivedBytes()
-            total = self._request.totalBytes()
-            running = state in (states.DownloadRequested, states.DownloadInProgress)
-            self._cancel.setVisible(running)
-            self._progress.setVisible(running)
-            if total > 0:
-                self._progress.setRange(0, 1000)
-                self._progress.setValue(int(received * 1000 / total))
-            else:
-                self._progress.setRange(0, 0)
+            return self.request.state() in (states.DownloadRequested, states.DownloadInProgress)
+
+        def status(self):
+            states = QWebEngineDownloadRequest.DownloadState
+            request = self.request
+            state, received, total = request.state(), request.receivedBytes(), request.totalBytes()
             if state == states.DownloadCompleted:
-                self._status.setText("Done, {}".format(format_bytes(received)))
-            elif state == states.DownloadCancelled:
-                self._status.setText("Cancelled")
-            elif state == states.DownloadInterrupted:
-                self._status.setText("Failed: {}".format(self._request.interruptReasonString()))
-            elif total > 0:
-                self._status.setText("{} of {}".format(format_bytes(received), format_bytes(total)))
+                return "Done · " + format_bytes(received), False
+            if state == states.DownloadCancelled:
+                return "Cancelled", False
+            if state == states.DownloadInterrupted:
+                return "Failed: " + (request.interruptReasonString() or "unknown error"), True
+            if request.isPaused():
+                return "Paused · {} of {}".format(format_bytes(received), format_bytes(total) if total > 0 else "unknown size"), False
+            now = time.monotonic()
+            self.samples = [s for s in self.samples if now - s[0] < 3] + [(now, received)]
+            first = self.samples[0]
+            speed = (received - first[1]) / (now - first[0]) if now - first[0] > 0.3 else 0
+            parts = [format_bytes(received) + (" of " + format_bytes(total) if total > 0 else "")]
+            if speed > 0:
+                parts.append(format_speed(speed))
+                if total > 0:
+                    parts.append(format_eta((total - received) / speed))
+            return " · ".join(parts), False
+
+    class DownloadRow(QFrame):
+        def __init__(self, window, download):
+            super().__init__()
+            self.setObjectName("row")
+            self._window = window
+            self._download = download
+            tile = QFrame()
+            tile.setObjectName("tile")
+            tile.setFixedSize(30, 30)
+            tile_layout = QHBoxLayout(tile)
+            tile_layout.setContentsMargins(8, 8, 8, 8)
+            tile_layout.addWidget(icon_label(icon("file"), 14))
+            self.name = label(os.path.basename(download.path))
+            self.bar = QProgressBar()
+            self.bar.setTextVisible(False)
+            self.status = label("", "secondary")
+            meta = QVBoxLayout()
+            meta.setSpacing(3)
+            meta.addWidget(self.name)
+            meta.addWidget(self.bar)
+            meta.addWidget(self.status)
+            self.pause = tool_button("pause", "Pause", self._toggle_pause, size=24)
+            self.cancel = tool_button("x", "Cancel", download.request.cancel, size=24)
+            self.folder = tool_button("folder", "Show in folder", self._show_folder, size=24)
+            self.retry = tool_button("reload", "Try again", self._retry, size=24)
+            row = QHBoxLayout(self)
+            row.setContentsMargins(10, 8, 8, 8)
+            row.setSpacing(10)
+            row.addWidget(tile)
+            row.addLayout(meta, 1)
+            for button in (self.pause, self.cancel, self.folder, self.retry):
+                row.addWidget(button)
+            request = download.request
+            request.receivedBytesChanged.connect(self.refresh)
+            request.stateChanged.connect(self.refresh)
+            request.isPausedChanged.connect(self.refresh)
+            self.refresh()
+
+        def refresh(self, *_args):
+            download, request = self._download, self._download.request
+            running = download.running()
+            states = QWebEngineDownloadRequest.DownloadState
+            text, failed = download.status()
+            self.status.setText(text)
+            self.status.setObjectName("failed" if failed else "secondary")
+            repolish(self.status)
+            self.bar.setVisible(running)
+            self.bar.setProperty("paused", request.isPaused())
+            repolish(self.bar)
+            total = request.totalBytes()
+            if total > 0:
+                self.bar.setRange(0, 1000)
+                self.bar.setValue(int(request.receivedBytes() * 1000 / total))
             else:
-                self._status.setText(format_bytes(received))
-            if not running:
-                self._on_finished(self._path)
+                self.bar.setRange(0, 0)
+            self.pause.setVisible(running)
+            set_icon(self.pause, "play" if request.isPaused() else "pause")
+            self.pause.setToolTip("Resume" if request.isPaused() else "Pause")
+            self.cancel.setVisible(running)
+            self.folder.setVisible(request.state() == states.DownloadCompleted)
+            self.retry.setVisible(request.state() == states.DownloadInterrupted)
+
+        def _toggle_pause(self):
+            request = self._download.request
+            request.resume() if request.isPaused() else request.pause()
 
         def _show_folder(self):
             # Only the folder: opening a downloaded file straight from the browser is how malware runs.
-            QDesktopServices.openUrl(QUrl.fromLocalFile(os.path.dirname(self._path)))
+            QDesktopServices.openUrl(QUrl.fromLocalFile(os.path.dirname(self._download.path)))
 
-    class DownloadsPanel(QFrame):
-        def __init__(self):
-            super().__init__(None, Qt.WindowType.Popup)
-            self.setObjectName("downloads")
-            self.setMinimumWidth(380)
-            self._in_progress = set()
-            self._list = QVBoxLayout()
-            self._list.setSpacing(0)
-            self._empty = QLabel("No downloads yet")
-            self._empty.setObjectName("secondary")
-            self._empty.setAlignment(Qt.AlignmentFlag.AlignCenter)
-            self._empty.setMinimumHeight(60)
-            layout = QVBoxLayout(self)
-            layout.setContentsMargins(6, 6, 6, 6)
-            title = QLabel("Downloads")
-            title.setStyleSheet("font-weight: 600; padding: 4px 8px;")
-            layout.addWidget(title)
-            layout.addWidget(self._empty)
-            layout.addLayout(self._list)
-
-        def directory(self):
-            directory = QStandardPaths.writableLocation(QStandardPaths.StandardLocation.DownloadLocation)
-            directory = directory or os.path.join(os.path.expanduser("~"), "Downloads")
-            os.makedirs(directory, exist_ok=True)
-            return directory
-
-        def add(self, request):
-            directory = self.directory()
-            name = safe_download_name(request.suggestedFileName() or request.downloadFileName())
-            path = unique_path(directory, name, self._in_progress)
-            self._in_progress.add(path)
-            request.setDownloadDirectory(directory)
-            request.setDownloadFileName(os.path.basename(path))
-            request.accept()
-            self._empty.hide()
-            self._list.insertWidget(0, DownloadRow(request, path, self._in_progress.discard))
-            while self._list.count() > 20:
-                old = self._list.takeAt(self._list.count() - 1).widget()
-                if old is not None:
-                    old.deleteLater()
-            return path
-
-        def show_under(self, widget):
-            # Wayland places popups relative to a parent window, so borrow the asking one.
-            if self.parentWidget() is not widget.window():
-                self.setParent(widget.window(), Qt.WindowType.Popup)
-            self.adjustSize()
-            corner = widget.mapToGlobal(widget.rect().bottomRight())
-            self.move(corner.x() - self.width(), corner.y() + 4)
-            self.show()
+        def _retry(self):
+            self._window.retry_download(self._download)
 
     class LibraryDialog(QDialog):
         """History or bookmarks: a search field and a list; activating a row opens it."""
@@ -835,7 +1804,7 @@ def main(argv=None):
                 buttons.addWidget(remove)
             buttons.addStretch(1)
             open_button = QPushButton("Open")
-            open_button.setObjectName("suggested")
+            open_button.setObjectName("primary")
             open_button.clicked.connect(lambda: self._open(self._list.currentItem()))
             buttons.addWidget(open_button)
             layout = QVBoxLayout(self)
@@ -884,12 +1853,15 @@ def main(argv=None):
             if private:
                 # Off the record: cookies, cache and permissions live in memory and end with this window.
                 self._profile = QWebEngineProfile(self)
-                application.configure_profile(self._profile)
+                application.configure_profile(self._profile, private=True)
             else:
                 self._profile = application.profile
             self._tabs = []
             self._closed = False
             self._entered = None
+            self._suggestions = []
+            self._selected = -1
+            self.setWindowFlag(Qt.WindowType.FramelessWindowHint)
             self.setWindowTitle(window_title(None, private))
             self.resize(1200, 800)
             self._build_actions()
@@ -902,142 +1874,45 @@ def main(argv=None):
         def private(self):
             return self._private
 
+        def tab_at(self, index):
+            return self._tabs[index] if 0 <= index < len(self._tabs) else None
+
         # ---- building ----
 
         def _build_actions(self):
-            self._add_action("New Tab", self._on_new_tab, ["Ctrl+T"])
-            self._add_action("Close Tab", self._on_close_tab, ["Ctrl+W", "Ctrl+F4"])
-            self._add_action("New Window", lambda: self._application.create_window(), ["Ctrl+N"])
-            self._add_action(
-                "New Private Window",
-                lambda: self._application.create_window(private=True),
-                ["Ctrl+Shift+N"],
-            )
-            self._add_action("Focus Address", self._on_focus_address, ["Ctrl+L", "Alt+D", "F6"])
+            self._add_action("New tab", self._on_new_tab, ["Ctrl+T"], "plus")
+            self._add_action("Close tab", self._on_close_tab, ["Ctrl+W", "Ctrl+F4"])
+            self._add_action("Reopen closed tab", self._reopen_closed, ["Ctrl+Shift+T"])
+            self._add_action("New window", lambda: self._application.create_window(), ["Ctrl+N"], "window")
+            self._add_action("New private window", lambda: self._application.create_window(private=True), ["Ctrl+Shift+N"], "eyeoff")
+            self._add_action("Focus address", self._on_focus_address, ["Ctrl+L", "Alt+D", "F6"])
             self._add_action("Reload", self._on_reload, ["Ctrl+R", "F5"])
             self._add_action("Back", lambda: self._current_view_call("back"), ["Alt+Left"])
             self._add_action("Forward", lambda: self._current_view_call("forward"), ["Alt+Right"])
-            self._add_action("Next Tab", lambda: self._cycle_tab(1), ["Ctrl+Tab", "Ctrl+PgDown"])
-            self._add_action("Previous Tab", lambda: self._cycle_tab(-1), ["Ctrl+Shift+Tab", "Ctrl+PgUp"])
-            self._add_action("Bookmark", self._on_toggle_bookmark, ["Ctrl+D"])
-            self._add_action("History", lambda: self._show_library("history"), ["Ctrl+H"])
-            self._add_action("Bookmarks", lambda: self._show_library("bookmarks"), ["Ctrl+Shift+O"])
-            self._add_action("Downloads", self._on_show_downloads, ["Ctrl+Shift+Y"])
-            self._add_action("Find", self._on_find, ["Ctrl+F"])
-            self._add_action("Zoom In", lambda: self._zoom(0.1), ["Ctrl++", "Ctrl+="])
-            self._add_action("Zoom Out", lambda: self._zoom(-0.1), ["Ctrl+-"])
-            self._add_action("Reset Zoom", lambda: self._zoom(None), ["Ctrl+0"])
-            self._add_action("Developer Tools", self._on_devtools, ["F12", "Ctrl+Shift+I"])
-            self._add_action("Full Screen", self._on_toggle_fullscreen, ["F11"])
-            self._add_action("Quit", QApplication.closeAllWindows, ["Ctrl+Q"])
+            self._add_action("Next tab", lambda: self._cycle_tab(1), ["Ctrl+Tab", "Ctrl+PgDown"])
+            self._add_action("Previous tab", lambda: self._cycle_tab(-1), ["Ctrl+Shift+Tab", "Ctrl+PgUp"])
+            self._add_action("Bookmark", self.toggle_bookmark, ["Ctrl+D"])
+            self._add_action("History", lambda: self._show_library("history"), ["Ctrl+H"], "clock")
+            self._add_action("Bookmarks", lambda: self._show_library("bookmarks"), ["Ctrl+Shift+O"], "bookmark")
+            self._add_action("Downloads", self.toggle_downloads, ["Ctrl+Shift+Y"], "download")
+            self._add_action("Find in page", self._on_find, ["Ctrl+F"], "search")
+            self._add_action("Zoom in", lambda: self._zoom(0.1), ["Ctrl++", "Ctrl+="])
+            self._add_action("Zoom out", lambda: self._zoom(-0.1), ["Ctrl+-"])
+            self._add_action("Reset zoom", lambda: self._zoom(None), ["Ctrl+0"])
+            self._add_action("Developer tools", self._on_devtools, ["F12", "Ctrl+Shift+I"], "code")
+            self._add_action("Full screen", self._on_toggle_fullscreen, ["F11"], "fullscreen")
+            self._add_action("Quit", QApplication.closeAllWindows, ["Ctrl+Q"], "power")
 
-        def _add_action(self, name, callback, shortcuts):
+        def _add_action(self, name, callback, shortcuts, icon_name=None):
             action = QAction(name, self)
             action.setShortcuts([QKeySequence(shortcut) for shortcut in shortcuts])
             action.setShortcutContext(Qt.ShortcutContext.WindowShortcut)
             action.triggered.connect(lambda _checked=False: callback())
+            if icon_name:
+                action._cc_icon = (icon_name, "text_secondary", False)
+                action.setIcon(icon(icon_name, "text_secondary"))
             self.addAction(action)
             return action
-
-        def _build_ui(self):
-            self._tab_bar = QTabBar()
-            self._tab_bar.setDocumentMode(True)
-            self._tab_bar.setDrawBase(False)
-            self._tab_bar.setMovable(True)
-            self._tab_bar.setExpanding(False)
-            self._tab_bar.setUsesScrollButtons(True)
-            self._tab_bar.setElideMode(Qt.TextElideMode.ElideRight)
-            self._tab_bar.setFocusPolicy(Qt.FocusPolicy.NoFocus)
-            self._tab_bar.currentChanged.connect(self._on_current_changed)
-            self._tab_bar.tabMoved.connect(self._on_tab_moved)
-
-            tab_row = QHBoxLayout()
-            tab_row.setContentsMargins(6, 0, 6, 0)
-            tab_row.setSpacing(2)
-            tab_row.addWidget(self._tab_bar)
-            tab_row.addWidget(tool_button("plus", "New tab (Ctrl+T)", self._on_new_tab))
-            tab_row.addStretch(1)
-            if self._private:
-                private = QLabel("Private")
-                private.setObjectName("private")
-                private.setToolTip("No history is saved, and cookies end when this window closes")
-                tab_row.addWidget(private)
-
-            self._back = tool_button("back", "Back (Alt+Left)", lambda: self._current_view_call("back"))
-            self._forward = tool_button("forward", "Forward (Alt+Right)", lambda: self._current_view_call("forward"))
-            self._reload = tool_button("reload", "Reload (Ctrl+R)", self._on_reload)
-            self._address = AddressBar()
-            self._address.setObjectName("address")
-            self._address.setPlaceholderText("Search or enter address")
-            self._address.returnPressed.connect(self._on_address_entered)
-            self._address.textEdited.connect(self._on_address_edited)
-            self._security = self._address.addAction(icon("search", TEXT_TERTIARY), QLineEdit.ActionPosition.LeadingPosition)
-            self._suggestions = QStringListModel(self)
-            self._completer = QCompleter(self._suggestions, self)
-            self._completer.setCompletionMode(QCompleter.CompletionMode.UnfilteredPopupCompletion)
-            self._completer.activated.connect(self._on_suggestion)
-            self._address.setCompleter(self._completer)
-            self._star = tool_button("star", "Bookmark this page (Ctrl+D)", self._on_toggle_bookmark)
-            self._downloads_button = tool_button("download", "Downloads (Ctrl+Shift+Y)", self._on_show_downloads)
-            self._menu_button = tool_button("menu", "Menu")
-            self._menu_button.setPopupMode(QToolButton.ToolButtonPopupMode.InstantPopup)
-            self._menu_button.setMenu(self._build_menu())
-
-            toolbar = QWidget()
-            toolbar.setObjectName("toolbar")
-            toolbar_row = QHBoxLayout(toolbar)
-            toolbar_row.setContentsMargins(8, 6, 8, 6)
-            toolbar_row.setSpacing(4)
-            for widget in (self._back, self._forward, self._reload):
-                toolbar_row.addWidget(widget)
-            toolbar_row.addWidget(self._address, 1)
-            for widget in (self._star, self._downloads_button, self._menu_button):
-                toolbar_row.addWidget(widget)
-
-            self._progress = QProgressBar()
-            self._progress.setObjectName("progress")
-            self._progress.setTextVisible(False)
-            self._progress.setRange(0, 100)
-            self._progress.hide()
-
-            self._find_bar = self._build_find_bar()
-            self._stack = QStackedWidget()
-            self._bubble = QLabel(self._stack)
-            self._bubble.setObjectName("bubble")
-            self._bubble.hide()
-
-            self._chrome = QWidget()
-            self._chrome.setObjectName("chrome")
-            chrome_layout = QVBoxLayout(self._chrome)
-            chrome_layout.setContentsMargins(0, 0, 0, 0)
-            chrome_layout.setSpacing(0)
-            chrome_layout.addLayout(tab_row)
-            chrome_layout.addWidget(toolbar)
-
-            central = QWidget()
-            layout = QVBoxLayout(central)
-            layout.setContentsMargins(0, 0, 0, 0)
-            layout.setSpacing(0)
-            layout.addWidget(self._chrome)
-            layout.addWidget(self._progress)
-            layout.addWidget(self._find_bar)
-            layout.addWidget(self._stack, 1)
-            self.setCentralWidget(central)
-
-        def _build_menu(self):
-            menu = QMenu(self)
-            for name in ("New Tab", "New Window", "New Private Window", None,
-                         "History", "Bookmarks", "Downloads", None,
-                         "Find", "Zoom In", "Zoom Out", "Reset Zoom", "Full Screen", None,
-                         "Developer Tools", None):
-                if name is None:
-                    menu.addSeparator()
-                else:
-                    menu.addAction(self._action(name))
-            menu.addAction("Make CottonCandy the Default Browser", self._on_make_default)
-            menu.addSeparator()
-            menu.addAction(self._action("Quit"))
-            return menu
 
         def _action(self, name):
             for action in self.actions():
@@ -1045,28 +1920,170 @@ def main(argv=None):
                     return action
             raise KeyError(name)
 
+        def _build_ui(self):
+            central = QWidget()
+            central.setObjectName("central")
+            self.setCentralWidget(central)
+
+            self._lights = TrafficLights(self)
+            self._tab_bar = CottonTabBar(self)
+            self._tab_bar.currentChanged.connect(self._on_current_changed)
+            self._tab_bar.tabMoved.connect(self._on_tab_moved)
+            self._new_tab_button = tool_button("plus", "New tab (Ctrl+T)", self._on_new_tab)
+            self._tab_list = tool_button("chevd", "All tabs")
+            self._tab_list.setPopupMode(QToolButton.ToolButtonPopupMode.InstantPopup)
+            self._tab_list_menu = QMenu(self)
+            self._tab_list_menu.aboutToShow.connect(self._fill_tab_list)
+            self._tab_list.setMenu(self._tab_list_menu)
+
+            self._tab_row = QWidget()
+            self._tab_row.setObjectName("tabrow")
+            self._tab_row.setFixedHeight(40)
+            tab_row = QHBoxLayout(self._tab_row)
+            tab_row.setContentsMargins(10, 0, 10, 0)
+            tab_row.setSpacing(4)
+            tab_row.addWidget(self._lights)
+            tab_row.addSpacing(4)
+            tab_row.addWidget(self._tab_bar, 0)
+            tab_row.addWidget(self._new_tab_button)
+            tab_row.addWidget(DragArea(self), 1)
+            if self._private:
+                private = QLabel("Private")
+                private.setObjectName("private")
+                private.setFixedHeight(22)
+                private.setToolTip("History, cookies and site data are deleted when this window closes")
+                tab_row.addWidget(private)
+            tab_row.addWidget(self._tab_list)
+
+            self._back = tool_button("back", "Back (Alt+Left)", lambda: self._current_view_call("back"))
+            self._forward = tool_button("forward", "Forward (Alt+Right)", lambda: self._current_view_call("forward"))
+            self._reload = tool_button("reload", "Reload (Ctrl+R)", self._on_reload)
+            self._address = AddressBar(self)
+            self._downloads_button = DownloadButton(self.toggle_downloads)
+            self._menu_button = tool_button("menu", "Main menu")
+            self._menu_button.setPopupMode(QToolButton.ToolButtonPopupMode.InstantPopup)
+            self._menu_button.setMenu(self._build_menu())
+
+            self._toolbar = QWidget()
+            self._toolbar.setObjectName("toolbar")
+            self._toolbar.setFixedHeight(41)
+            toolbar = QHBoxLayout(self._toolbar)
+            toolbar.setContentsMargins(10, 4, 10, 5)
+            toolbar.setSpacing(4)
+            for widget in (self._back, self._forward, self._reload):
+                toolbar.addWidget(widget)
+            toolbar.addWidget(self._address, 1)
+            toolbar.addWidget(self._downloads_button)
+            toolbar.addWidget(self._menu_button)
+
+            self._find_bar = self._build_find_bar()
+            self._stack = QStackedWidget()
+            self._bubble = QLabel(self._stack)
+            self._bubble.setObjectName("bubble")
+            self._bubble.hide()
+
+            layout = QVBoxLayout(central)
+            layout.setContentsMargins(0, 0, 0, 0)
+            layout.setSpacing(0)
+            layout.addWidget(self._tab_row)
+            layout.addWidget(self._toolbar)
+            layout.addWidget(self._find_bar)
+            layout.addWidget(self._stack, 1)
+
+            # Floating on top of the content: page-load progress along the toolbar's bottom edge, and popovers.
+            self._progress = QProgressBar(central)
+            self._progress.setObjectName("pageprogress")
+            self._progress.setTextVisible(False)
+            self._progress.setRange(0, 100)
+            self._progress.hide()
+            self._dropdown = Overlay(self, 400)
+            self._dropdown_layout = QVBoxLayout(self._dropdown)
+            self._dropdown_layout.setContentsMargins(6, 6, 6, 6)
+            self._dropdown_layout.setSpacing(0)
+            self._site_card = Overlay(self, 340)
+            self._downloads_card = Overlay(self, 380)
+            self._overlays = (self._dropdown, self._site_card, self._downloads_card)
+            self._scrim = Scrim(self)
+            edge = Qt.Edge
+            shapes = Qt.CursorShape
+            self._grips = [
+                EdgeGrip(self, edge.LeftEdge, shapes.SizeHorCursor),
+                EdgeGrip(self, edge.RightEdge, shapes.SizeHorCursor),
+                EdgeGrip(self, edge.TopEdge, shapes.SizeVerCursor),
+                EdgeGrip(self, edge.BottomEdge, shapes.SizeVerCursor),
+                EdgeGrip(self, edge.BottomEdge | edge.LeftEdge, shapes.SizeBDiagCursor),
+                EdgeGrip(self, edge.BottomEdge | edge.RightEdge, shapes.SizeFDiagCursor),
+            ]
+            self._escape = self._add_action("Close popover", lambda: self.dismiss_overlays(escape=True), ["Esc"])
+            self._escape.setEnabled(False)  # only while a popover is open, so pages keep their own Escape
+
+        def _build_menu(self):
+            menu = QMenu(self)
+            for name in ("New tab", "New window", "New private window"):
+                menu.addAction(self._action(name))
+            menu.addSeparator()
+            zoom = QWidget()
+            row = QHBoxLayout(zoom)
+            row.setContentsMargins(10, 2, 6, 2)
+            row.setSpacing(4)
+            row.addWidget(icon_label(icon("search", "text_secondary")))
+            row.addSpacing(6)
+            row.addWidget(label("Zoom"), 1)
+            row.addWidget(tool_button("minus", "Zoom out (Ctrl+-)", lambda: self._zoom(-0.1), size=24))
+            self._zoom_value = label("100%")
+            self._zoom_value.setFixedWidth(44)
+            self._zoom_value.setAlignment(Qt.AlignmentFlag.AlignCenter)
+            row.addWidget(self._zoom_value)
+            row.addWidget(tool_button("plus", "Zoom in (Ctrl+=)", lambda: self._zoom(0.1), size=24))
+            row.addWidget(tool_button("fullscreen", "Full screen (F11)", self._on_toggle_fullscreen, size=24))
+            zoom_action = QWidgetAction(menu)
+            zoom_action.setDefaultWidget(zoom)
+            menu.addAction(zoom_action)
+            menu.addSeparator()
+            for name in ("History", "Bookmarks", "Downloads", "Find in page"):
+                menu.addAction(self._action(name))
+            menu.addSeparator()
+            menu.addAction(self._action("Developer tools"))
+            default = menu.addAction("Make CottonCandy the default browser", self._on_make_default)
+            default._cc_icon = ("globe", "text_secondary", False)
+            default.setIcon(icon("globe", "text_secondary"))
+            clear = menu.addAction("Clear cookies and cache…", self._on_clear_data)
+            clear._cc_icon = ("trash", "text_secondary", False)
+            clear.setIcon(icon("trash", "text_secondary"))
+            menu.addSeparator()
+            menu.addAction(self._action("Quit"))
+            menu.aboutToShow.connect(self._sync_zoom_label)
+            return menu
+
         def _build_find_bar(self):
             bar = QWidget()
             bar.setObjectName("findbar")
+            bar.setFixedHeight(42)
             row = QHBoxLayout(bar)
-            row.setContentsMargins(8, 4, 8, 6)
+            row.setContentsMargins(10, 6, 10, 6)
+            row.setSpacing(6)
             self._find_entry = QLineEdit()
             self._find_entry.setPlaceholderText("Find in page")
-            self._find_entry.setMaximumWidth(320)
+            self._find_entry.setFixedWidth(280)
+            self._find_entry.setFixedHeight(30)
+            self._find_icon = self._find_entry.addAction(icon("search", "text_secondary"), QLineEdit.ActionPosition.LeadingPosition)
+            self._find_icon._cc_icon = ("search", "text_secondary", False)
             self._find_entry.textChanged.connect(lambda _text: self._find(False))
             self._find_entry.returnPressed.connect(lambda: self._find(False))
-            self._find_count = QLabel()
-            self._find_count.setObjectName("secondary")
-            previous = tool_button("back", "Previous match (Shift+Enter)", lambda: self._find(True))
-            following = tool_button("forward", "Next match (Enter)", lambda: self._find(False))
-            close = tool_button("x", "Close (Esc)", self._close_find)
-            row.addWidget(self._find_entry)
-            row.addWidget(previous)
-            row.addWidget(following)
-            row.addWidget(self._find_count)
-            row.addStretch(1)
-            row.addWidget(close)
             self._find_entry.installEventFilter(self)
+            self._find_count = label("", "findcount")
+            self._find_count.setMinimumWidth(70)
+            self._match_case = QPushButton("Match case")
+            self._match_case.setObjectName("toggle")
+            self._match_case.setCheckable(True)
+            self._match_case.toggled.connect(lambda _on: self._find(False))
+            row.addWidget(self._find_entry)
+            row.addWidget(tool_button("chevu", "Previous match (Shift+Enter)", lambda: self._find(True), size=24))
+            row.addWidget(tool_button("chevd", "Next match (Enter)", lambda: self._find(False), size=24))
+            row.addWidget(self._find_count)
+            row.addWidget(self._match_case)
+            row.addStretch(1)
+            row.addWidget(tool_button("x", "Close (Esc)", self._close_find, size=24))
             bar.hide()
             return bar
 
@@ -1091,61 +2108,73 @@ def main(argv=None):
                         index = position + 1
             self._tabs.insert(index, tab)
             self._stack.addWidget(tab.view)
-            self._tab_bar.insertTab(index, "New Tab")
-            close = tool_button("x", "Close tab (Ctrl+W)", lambda: self._close_tab(tab))
-            close.setIconSize(QSize(12, 12))
-            self._tab_bar.setTabButton(index, QTabBar.ButtonPosition.RightSide, close)
+            self._tab_bar.insertTab(index, "")
+            self._tab_bar.setTabButton(index, QTabBar.ButtonPosition.LeftSide, tab.label)
+            self._tab_bar.setTabButton(index, QTabBar.ButtonPosition.RightSide, tab.buttons)
             self._connect_tab(tab)
             if url:
                 tab.view.load(QUrl(url))
-                self._sync_background(tab, url)
+            self._relayout_tabs()
             if focus or len(self._tabs) == 1:
                 self._tab_bar.setCurrentIndex(index)
                 if not url or url == HOME_URL:
                     QTimer.singleShot(0, self._on_focus_address)
                 else:
                     tab.view.setFocus()
+            self.refresh_tab_buttons()
             return tab
 
         def _connect_tab(self, tab):
-            view = tab.view
-            page = tab.page
+            view, page = tab.view, tab.page
             view.titleChanged.connect(lambda title: self._on_title_changed(tab, title))
             view.urlChanged.connect(lambda url: self._on_url_changed(tab, url))
-            view.iconChanged.connect(lambda tab_icon: self._set_tab_icon(tab, tab_icon))
+            view.iconChanged.connect(lambda tab_icon: self._on_icon_changed(tab, tab_icon))
             view.loadStarted.connect(lambda: self._on_load_started(tab))
             view.loadProgress.connect(lambda value: self._on_load_progress(tab, value))
             view.loadFinished.connect(lambda ok: self._on_load_finished(tab, ok))
             view.renderProcessTerminated.connect(lambda status, code: self._on_crashed(tab, status))
+            page.loadingChanged.connect(lambda info: self._on_loading_changed(tab, info))
             page.linkHovered.connect(self._show_bubble)
             page.permissionRequested.connect(lambda permission: self._on_permission(tab, permission))
-            page.certificateError.connect(self._on_certificate_error)
+            page.certificateError.connect(lambda error: error.rejectCertificate())  # never a way past it
             page.fullScreenRequested.connect(self._on_fullscreen_requested)
             page.findTextFinished.connect(self._on_find_result)
-            page.windowCloseRequested.connect(lambda: self._close_tab(tab))
+            page.windowCloseRequested.connect(lambda: self.close_tab(tab))
+            page.recentlyAudibleChanged.connect(lambda audible: self._on_audible(tab, audible))
+            page.audioMutedChanged.connect(lambda _muted: self.refresh_tab_buttons())
 
         def _index_of(self, tab):
             return self._tabs.index(tab) if tab in self._tabs else -1
 
         def _current(self):
-            index = self._tab_bar.currentIndex()
-            return self._tabs[index] if 0 <= index < len(self._tabs) else None
+            return self.tab_at(self._tab_bar.currentIndex())
 
-        def _close_tab(self, tab):
+        def close_tab(self, tab):
             index = self._index_of(tab)
             if index >= 0:
-                self._close_tab_at(index)
+                self.close_tab_at(index)
 
-        def _close_tab_at(self, index):
+        def close_tab_at(self, index):
             if not 0 <= index < len(self._tabs):
                 return
             tab = self._tabs.pop(index)
+            url = tab.url()
+            if is_web_url(url) and not self._private:
+                self._application.remember_closed(url, tab.view.title())
             self._tab_bar.removeTab(index)
             self._dispose_tab(tab)
             if not self._tabs:
                 self.close()
+                return
+            self._relayout_tabs()
+            self.refresh_tab_buttons()
 
         def _dispose_tab(self, tab):
+            for permission in tab.permissions:
+                if permission.isValid():
+                    permission.deny()
+            tab.permissions.clear()
+            tab.buttons.deleteLater()
             if tab.devtools is not None:
                 tab.devtools.close()
             self._stack.removeWidget(tab.view)
@@ -1161,13 +2190,115 @@ def main(argv=None):
                 return
             self._stack.setCurrentWidget(tab.view)
             self._close_find()
+            self.hide_overlays()
+            self._relayout_tabs()
+            self.refresh_tab_buttons()
             self.refresh_toolbar()
-            if tab.view.url().toString() not in ("", HOME_URL):
-                tab.view.setFocus()
+            self._show_pending_permission()
 
         def _cycle_tab(self, step):
             if self._tabs:
                 self._tab_bar.setCurrentIndex((self._tab_bar.currentIndex() + step) % len(self._tabs))
+
+        def _relayout_tabs(self):
+            """Shrink inactive tabs to their icon when there isn't room for every title; pinned tabs always are."""
+            available = max(200, self._tab_row.width() - 180)
+            normal = [t for t in self._tabs if not t.pinned]
+            crowded = len(normal) * 204 + (len(self._tabs) - len(normal)) * 40 > available
+            current = self._current()
+            changed = False
+            for index, tab in enumerate(self._tabs):
+                icon_only = tab.pinned or (crowded and tab is not current)
+                if icon_only != tab.icon_only:
+                    tab.icon_only = icon_only
+                    changed = True
+                self._sync_tab_text(index, tab)
+            if changed:
+                for index in range(len(self._tabs)):
+                    self._tab_bar.setTabText(index, " " if self._tabs[index].icon_only else "")  # relayout
+            self.refresh_tab_buttons()
+
+        def _sync_tab_text(self, index, tab):
+            title = "Page crashed" if tab.crashed else (tab.view.title() or "New Tab")
+            if url_parts(tab.url())["kind"] == "empty":
+                title = "New Tab"
+            tab.title = title
+            self._tab_bar.setTabToolTip(index, title)
+
+        def refresh_tab_buttons(self):
+            current = self._current()
+            for index, tab in enumerate(self._tabs):
+                buttons = tab.buttons
+                muted = tab.page.isAudioMuted()
+                show_audio = (tab.audible or muted) and not tab.icon_only
+                buttons.audio.setVisible(show_audio)
+                if show_audio:
+                    set_icon(buttons.audio, "mute" if muted else "speaker", "text_secondary" if muted else "accent_text")
+                    buttons.audio.setToolTip("Unmute tab" if muted else "Mute tab")
+                close_visible = not tab.icon_only and (tab is current or index == self._tab_bar.hovered)
+                buttons.close.setVisible(close_visible)
+                state = "active" if tab is current else ("hover" if index == self._tab_bar.hovered else "")
+                # 200 px tabs: 8 padding, label, the audio and close buttons, 4 padding.
+                width = 16 if tab.icon_only else 200 - 12 - 20 - (20 if show_audio else 0)
+                tab.label.set_content(self._tab_icon(tab), getattr(tab, "title", "New Tab"), state, width)
+
+        def _tab_icon(self, tab):
+            if tab.loading:
+                return spinner_frame(self._application.spin_step)
+            if tab.crashed:
+                return icon("alert", "error")
+            if url_parts(tab.url())["kind"] == "empty":
+                return icon("search", "text_secondary")
+            if not tab.favicon.isNull() and tab.favicon_host == _host(tab.url()):
+                return tab.favicon
+            known = self._application.known_icon(tab.url())  # the site's icon from an earlier visit
+            return known if known is not None else icon("globe", "text_secondary")
+
+        def tab_menu(self, index, position):
+            tab = self.tab_at(index)
+            if tab is None:
+                return
+            menu = QMenu(self)
+            menu.addAction("Reload", tab.view.reload)
+            menu.addAction("Duplicate", lambda: self.add_tab(tab.url(), after=tab.page))
+            menu.addAction("Unpin" if tab.pinned else "Pin", lambda: self._toggle_pin(tab))
+            menu.addAction("Unmute" if tab.page.isAudioMuted() else "Mute", lambda: self.toggle_mute(tab))
+            menu.addSeparator()
+            menu.addAction("Close", lambda: self.close_tab(tab))
+            menu.addAction("Close other tabs", lambda: self._close_others(tab))
+            reopen = menu.addAction("Reopen closed tab", self._reopen_closed)
+            reopen.setEnabled(bool(self._application.recently_closed))
+            menu.exec(position)
+
+        def _toggle_pin(self, tab):
+            tab.pinned = not tab.pinned
+            index = self._index_of(tab)
+            target = len([t for t in self._tabs if t.pinned and t is not tab]) if tab.pinned else len([t for t in self._tabs if t.pinned])
+            if index != target:
+                self._tab_bar.moveTab(index, target)
+            self._relayout_tabs()
+
+        def toggle_mute(self, tab):
+            tab.page.setAudioMuted(not tab.page.isAudioMuted())
+            self.refresh_tab_buttons()
+
+        def _close_others(self, keep):
+            for tab in [t for t in self._tabs if t is not keep and not t.pinned]:
+                self.close_tab(tab)
+
+        def _reopen_closed(self):
+            if self._application.recently_closed:
+                url, _title = self._application.recently_closed.pop(0)
+                self.add_tab(url)
+
+        def _fill_tab_list(self):
+            self._tab_list_menu.clear()
+            for index, tab in enumerate(self._tabs):
+                title = self._tab_bar.tabToolTip(index)
+                action = self._tab_list_menu.addAction(self._tab_icon(tab), title)
+                action.setCheckable(True)
+                action.setChecked(tab is self._current())
+                action.triggered.connect(lambda _checked=False, i=index: self._tab_bar.setCurrentIndex(i))
 
         # ---- page signals ----
 
@@ -1175,34 +2306,44 @@ def main(argv=None):
             index = self._index_of(tab)
             if index < 0:
                 return
-            label = title or tab.view.url().toString() or "New Tab"
-            if label == HOME_URL:
-                label = "New Tab"
-            self._tab_bar.setTabText(index, label)
-            self._tab_bar.setTabToolTip(index, label)
-            if not self._private:
-                self._application.store.set_title(tab.view.url().toString(), title)
+            self._sync_tab_text(index, tab)
+            if not self._private and tab.error_url is None:
+                self._application.store.set_title(tab.url(), title)
             if tab is self._current():
-                self.setWindowTitle(window_title(title if label != "New Tab" else None, self._private))
+                self._update_window_title(tab)
+
+        def _update_window_title(self, tab):
+            empty = url_parts(tab.url())["kind"] == "empty"
+            self.setWindowTitle(window_title(None if empty else tab.view.title(), self._private))
 
         def _on_url_changed(self, tab, url):
-            self._sync_background(tab, url.toString())
             if tab is self._current():
                 self.refresh_toolbar()
-
-        def _sync_background(self, tab, url):
-            # Dark behind the empty new tab; white everywhere else, which is what pages expect.
-            tab.page.setBackgroundColor(QColor(BACKGROUND if url in ("", HOME_URL) else "#ffffff"))
-
-        def _set_tab_icon(self, tab, tab_icon):
             index = self._index_of(tab)
             if index >= 0:
-                self._tab_bar.setTabIcon(index, tab_icon)
+                self._sync_tab_text(index, tab)
+
+        def _on_icon_changed(self, tab, tab_icon):
+            url = tab.url()
+            host = _host(url)
+            if tab_icon.isNull():
+                # Chromium clears the icon while it loads; keep the site's icon unless the site changed.
+                if host != tab.favicon_host:
+                    tab.favicon, tab.favicon_host = QIcon(), host
+            else:
+                tab.favicon, tab.favicon_host = tab_icon, host
+                if is_web_url(url) and not self._private:
+                    self._application.store.set_icon(url, png_bytes(tab_icon))
+                    self._application.forget_icon(url)
+            self.refresh_tab_buttons()
 
         def _on_load_started(self, tab):
             tab.loading = True
+            tab.crashed = False
+            self._application.ensure_spinner()
             if tab is self._current():
                 self.refresh_toolbar()
+            self.refresh_tab_buttons()
 
         def _on_load_progress(self, tab, value):
             if tab is self._current():
@@ -1211,144 +2352,324 @@ def main(argv=None):
 
         def _on_load_finished(self, tab, ok):
             tab.loading = False
-            url = tab.view.url().toString()
-            if ok and not self._private:
+            url = tab.url()
+            if ok and not self._private and tab.error_url != url:
                 self._application.store.record_visit(url, tab.view.title())
             if tab is self._current():
                 self.refresh_toolbar()
+            self.refresh_tab_buttons()
+
+        def _on_loading_changed(self, tab, info):
+            status = QWebEngineLoadingInfo.LoadStatus
+            url = info.url().toString()
+            if info.status() == status.LoadStartedStatus and url == tab.error_url:
+                tab.error_url = None  # trying the failed page again
+            if info.status() != status.LoadFailedStatus or info.errorCode() == -3 or url_scheme(url) not in ("http", "https", "file"):
+                return  # -3 is ERR_ABORTED: the user stopped it or went somewhere else
+            kind = error_kind(info.errorDomain().name, info.errorCode())
+            # Replace Chromium's error page with ours. setHtml with the failed URL keeps that URL in the
+            # address bar and in history, so Back and Reload behave; the page itself runs no code.
+            tab.error_url = url
+            tab.page.error_page_pending = True
+            tab.page.setHtml(error_html(tok(), kind, url, info.errorString() or "Error {}".format(info.errorCode())), info.url())
 
         def _on_crashed(self, tab, status):
             if status == QWebEnginePage.RenderProcessTerminationStatus.NormalTerminationStatus:
                 return
+            tab.crashed = True
+            tab.loading = False
             index = self._index_of(tab)
             if index >= 0:
-                self._tab_bar.setTabText(index, "Page crashed")
+                self._sync_tab_text(index, tab)
+            self.refresh_tab_buttons()
             if tab is self._current():
                 self._show_bubble("This page crashed. Press Ctrl+R to load it again.")
 
+        def _on_audible(self, tab, audible):
+            tab.audible = audible
+            self.refresh_tab_buttons()
+
+        # ---- permissions: a card anchored to the site icon, never allowed by default ----
+
         def _on_permission(self, tab, permission):
-            name = permission.permissionType().name
-            description = permission_description(name)
-            if description is None:
+            if permission_description(permission.permissionType().name) is None:
                 permission.deny()
                 return
-            host = permission.origin().host() or permission.origin().toString()
-            box = QMessageBox(self)
-            box.setWindowTitle("Permission")
-            box.setText("{} wants to {}.".format(host, description))
-            box.setInformativeText("CottonCandy remembers your answer until it quits.")
-            allow = box.addButton("Allow", QMessageBox.ButtonRole.AcceptRole)
-            block = box.addButton("Block", QMessageBox.ButtonRole.RejectRole)
-            # Enter or Esc must never grant anything: only a click on Allow does.
-            box.setDefaultButton(block)
-            box.setEscapeButton(block)
+            tab.permissions.append(permission)
+            if tab is self._current():
+                self._show_pending_permission()
 
-            def answered(_result):
-                if box.clickedButton() is allow:
-                    permission.grant()
-                else:
-                    permission.deny()
-                box.deleteLater()
-
-            box.finished.connect(answered)
-            box.open()
-
-        def _on_certificate_error(self, error):
-            # No way past a bad certificate: Chromium's error page explains it.
-            error.rejectCertificate()
-
-        def _on_fullscreen_requested(self, request):
-            request.accept()
-            self._set_fullscreen(request.toggleOn())
-
-        def _set_fullscreen(self, on):
-            self._chrome.setVisible(not on)
-            if on:
-                self.showFullScreen()
-            else:
-                self.showNormal()
-
-        def _on_toggle_fullscreen(self):
-            self._set_fullscreen(not self.isFullScreen())
-
-        def _show_bubble(self, text):
-            if not text:
-                self._bubble.hide()
+        def _show_pending_permission(self):
+            tab = self._current()
+            if tab is None:
                 return
-            self._bubble.setText(text if len(text) <= 160 else text[:157] + "…")
-            self._bubble.adjustSize()
-            self._bubble.move(8, self._stack.height() - self._bubble.height() - 8)
-            self._bubble.raise_()
-            self._bubble.show()
+            tab.permissions = [p for p in tab.permissions if p.isValid()]
+            if not tab.permissions:
+                if getattr(self._site_card, "kind", None) == "permission":
+                    self._site_card.hide()
+                return
+            permission = tab.permissions[0]
+            name = permission.permissionType().name
+            origin = permission.origin()
+            card = self._site_card
+            card.kind = "permission"
+            layout = self._card_layout(card)
+            head = QHBoxLayout()
+            head.setSpacing(10)
+            badge = QFrame()
+            badge.setObjectName("tile")
+            badge.setFixedSize(30, 30)
+            badge_row = QHBoxLayout(badge)
+            badge_row.setContentsMargins(8, 8, 8, 8)
+            badge_row.addWidget(icon_label(icon(PERMISSION_ICONS.get(name, "info")), 14))
+            head.addWidget(badge, 0, Qt.AlignmentFlag.AlignTop)
+            text = QVBoxLayout()
+            text.setSpacing(2)
+            text.addWidget(label("{} wants to {}".format(origin.host() or origin.toString(), permission_description(name)), "title", wrap=True))
+            text.addWidget(label("Your answer lasts for this tab. Other tabs ask again.", "secondary", wrap=True))
+            head.addLayout(text, 1)
+            layout.addLayout(head)
+            details = QFrame()
+            details.setObjectName("details")
+            grid = QGridLayout(details)
+            grid.setContentsMargins(10, 8, 10, 8)
+            grid.setHorizontalSpacing(12)
+            for row_index, (key, value) in enumerate((("Asked by", origin.toString()), ("Tab", tab.view.title() or tab.url()))):
+                grid.addWidget(label(key, "secondary"), row_index, 0)
+                value_label = label(value, wrap=True)
+                grid.addWidget(value_label, row_index, 1)
+            details.hide()
+            layout.addWidget(details)
+            buttons = QHBoxLayout()
+            buttons.setSpacing(6)
+            allow = QPushButton("Allow once")
+            allow.setObjectName("primary")
+            deny = QPushButton("Deny")
+            more = QPushButton("Details")
+            more.setObjectName("ghost")
+            allow.clicked.connect(lambda: self._answer_permission(tab, permission, True))
+            deny.clicked.connect(lambda: self._answer_permission(tab, permission, False))
+            more.clicked.connect(lambda: (details.setVisible(not details.isVisible()), more.setText("Hide details" if details.isVisible() else "Details"), card.adjustSize()))
+            for button in (allow, deny, more):
+                buttons.addWidget(button)
+            buttons.addStretch(1)
+            layout.addLayout(buttons)
+            card.show_at(self._address.site)
+            deny.setFocus()  # Enter or Esc on the card denies; only a click on Allow allows
 
-        # ---- toolbar ----
+        def _answer_permission(self, tab, permission, allow):
+            if permission in tab.permissions:
+                tab.permissions.remove(permission)
+            if permission.isValid():
+                permission.grant() if allow else permission.deny()
+            self._site_card.hide()
+            self._show_pending_permission()
+
+        def _card_layout(self, card):
+            layout = card.layout()
+            if layout is None:
+                layout = QVBoxLayout(card)
+                layout.setContentsMargins(14, 14, 14, 14)
+                layout.setSpacing(10)
+            clear_layout(layout)
+            return layout
+
+        def toggle_site_info(self):
+            card = self._site_card
+            if card.isVisible():
+                card.hide()
+                return
+            tab = self._current()
+            if tab is None:
+                return
+            if tab.permissions:
+                self._show_pending_permission()
+                return
+            parts = url_parts(tab.url())
+            if parts["kind"] == "empty":
+                self._on_focus_address()
+                return
+            card.kind = "info"
+            layout = self._card_layout(card)
+            sentences = {
+                "secure": ("lock", "Connection is secure. The site’s certificate is valid."),
+                "insecure": ("warning", "Not secure: this page is sent unencrypted. Don’t enter passwords or card numbers."),
+                "local": ("info", "A page served from this computer. It isn’t encrypted, but it doesn’t leave the computer."),
+                "file": ("file", "A file on this computer."),
+            }
+            name, sentence = sentences.get(parts["kind"], ("info", "A CottonCandy page."))
+            head = QHBoxLayout()
+            head.setSpacing(10)
+            head.addWidget(icon_label(icon(name, "error" if parts["kind"] == "insecure" else "text_secondary")), 0, Qt.AlignmentFlag.AlignTop)
+            text = QVBoxLayout()
+            text.setSpacing(2)
+            text.addWidget(label(parts["host"] if parts["kind"] != "file" else "Local file", "title"))
+            text.addWidget(label(sentence, "secondary", wrap=True))
+            head.addLayout(text, 1)
+            layout.addLayout(head)
+            layout.addWidget(label("Camera, microphone, location, screen sharing and notifications: this site has to ask every time, and nothing is allowed until you click Allow once.", "secondary", wrap=True))
+            card.show_at(self._address.site)
+
+        # ---- downloads ----
+
+        def toggle_downloads(self):
+            card = self._downloads_card
+            if card.isVisible():
+                card.hide()
+                return
+            self.refresh_downloads()
+            card.show_at(self._downloads_button, align="right")
+
+        def refresh_downloads(self):
+            card = self._downloads_card
+            layout = self._card_layout(card)
+            layout.setContentsMargins(6, 6, 6, 6)
+            layout.setSpacing(0)
+            header = QHBoxLayout()
+            header.setContentsMargins(10, 4, 4, 6)
+            header.addWidget(label("Downloads", "title"), 1)
+            folder = QPushButton("Open folder")
+            folder.setObjectName("ghost")
+            folder.clicked.connect(lambda: QDesktopServices.openUrl(QUrl.fromLocalFile(self._application.downloads_directory())))
+            header.addWidget(folder)
+            layout.addLayout(header)
+            downloads = self._application.downloads
+            if not downloads:
+                empty = label("No downloads yet", "secondary")
+                empty.setAlignment(Qt.AlignmentFlag.AlignCenter)
+                empty.setMinimumHeight(56)
+                layout.addWidget(empty)
+            for download in downloads[:8]:
+                layout.addWidget(DownloadRow(self, download))
+            card.adjustSize()
+
+        def retry_download(self, download):
+            tab = self._current()
+            if tab is not None:
+                tab.page.download(download.request.url(), os.path.basename(download.path))
+
+        # ---- address bar and suggestions ----
 
         def refresh_toolbar(self):
             tab = self._current()
             if tab is None:
                 return
-            url = tab.view.url().toString()
+            url = tab.url()
             history = tab.view.history()
             self._back.setEnabled(history.canGoBack())
             self._forward.setEnabled(history.canGoForward())
-            self._reload.setIcon(icon("x" if tab.loading else "reload"))
+            set_icon(self._reload, "x" if tab.loading else "reload")
             self._reload.setToolTip("Stop (Esc)" if tab.loading else "Reload (Ctrl+R)")
             self._progress.setVisible(tab.loading)
-            if not self._address.hasFocus() or not self._address.isModified():
-                self.restore_address()
-            scheme = url_scheme(url)
-            if scheme == "https":
-                self._security.setIcon(icon("lock", TEXT_SECONDARY))
-                self._security.setToolTip("The connection to this site is encrypted")
-            elif scheme == "http" and not is_local_host(tab.view.url().host()):
-                self._security.setIcon(icon("warning", ERROR))
-                self._security.setToolTip("Not secure: this page is sent unencrypted")
-            else:
-                self._security.setIcon(icon("search", TEXT_TERTIARY))
-                self._security.setToolTip("")
-            bookmarked = self._application.store.is_bookmarked(url)
-            self._star.setEnabled(is_bookmarkable(url))
-            self._star.setIcon(icon("star", accent_fg, filled=True) if bookmarked else icon("star"))
-            self._star.setToolTip("Remove bookmark (Ctrl+D)" if bookmarked else "Bookmark this page (Ctrl+D)")
-            title = tab.view.title()
-            self.setWindowTitle(window_title(title if url not in ("", HOME_URL) else None, self._private))
+            self._address.set_url(url, self._application.store.is_bookmarked(url))
+            self._update_window_title(tab)
+            self._place_progress()
 
-        def restore_address(self):
-            tab = self._current()
-            url = tab.view.url().toString() if tab is not None else ""
-            self._address.setText("" if url == HOME_URL else url)
-            self._address.setModified(False)
-            self._address.setCursorPosition(0)
+        def _place_progress(self):
+            self._progress.setGeometry(0, self._toolbar.geometry().bottom() - 1, self.centralWidget().width(), 2)
+            self._progress.raise_()
 
-        def _on_address_edited(self, text):
-            self._suggestions.setStringList(self._application.store.suggestions(text))
-
-        def _on_address_entered(self):
-            # Enter fires this even with the suggestions open (with the picked one already in the field),
-            # and then the completer's activated() for the same text, which _on_suggestion skips.
-            self._entered = self._address.text()
-            self._completer.popup().hide()
-            self._navigate(self._entered)
-
-        def _on_suggestion(self, text):
-            if text == self._entered:
-                self._entered = None
+        def update_suggestions(self, text):
+            store = self._application.store
+            open_tabs = [(t.url(), t.view.title()) for t in self._tabs if t is not self._current()]
+            self._suggestions = build_suggestions(text, open_tabs, store.bookmark_matches(text), store.history_matches(text))
+            self._selected = -1
+            layout = self._dropdown_layout
+            clear_layout(layout)
+            if not self._suggestions:
+                self._dropdown.hide()
                 return
-            self._navigate(text)  # picked with the mouse
+            self._rows = []
+            group = None
+            for index, entry in enumerate(self._suggestions):
+                if entry["group"] != group:
+                    group = entry["group"]
+                    layout.addWidget(label(group, "group"))
+                if entry["kind"] == "search":
+                    row_icon, sub = icon("search", "text_secondary"), "DuckDuckGo"
+                elif entry["kind"] == "address":
+                    row_icon, sub = icon("globe", "text_secondary"), "Open address"
+                else:
+                    row_icon = self._icon_from_png(store.icon_for(entry["url"])) or icon("globe", "text_secondary")
+                    sub = url_parts(entry["url"])["host"]
+                row = Row(row_icon, entry["title"], sub, "Switch to tab" if entry["kind"] == "tab" else "",
+                          on_click=lambda e=entry: self.open_suggestion(e))
+                layout.addWidget(row)
+                self._rows.append(row)
+            self._dropdown.setFixedWidth(self._address.width() + 2)
+            self._dropdown.show_at(self._address)
+            self._address.edit.setFocus()
+
+        def _icon_from_png(self, png):
+            if not png:
+                return None
+            pixmap = QPixmap()
+            pixmap.loadFromData(png, "PNG")
+            return QIcon(pixmap) if not pixmap.isNull() else None
+
+        def move_suggestion(self, step):
+            if not self._dropdown.isVisible() or not self._suggestions:
+                return
+            self._selected = max(-1, min(len(self._suggestions) - 1, self._selected + step))
+            for index, row in enumerate(self._rows):
+                row.set_selected(index == self._selected)
+
+        def hide_suggestions(self):
+            self._dropdown.hide()
+            self._selected = -1
+
+        def address_entered(self):
+            if self._dropdown.isVisible() and self._selected >= 0:
+                self.open_suggestion(self._suggestions[self._selected])
+                return
+            self._navigate(self._address.edit.text())
+
+        def open_suggestion(self, entry):
+            if entry["kind"] == "tab":
+                for index, tab in enumerate(self._tabs):
+                    if tab.url() == entry["url"]:
+                        self._address.finish()
+                        self._tab_bar.setCurrentIndex(index)
+                        return
+            self._load(entry["url"])
 
         def _navigate(self, text):
             url = resolve_input(text)
+            if url is not None:
+                self._load(url)
+
+        def _load(self, url):
             tab = self._current()
-            if url is None or tab is None:
+            if tab is None:
                 return
-            self._address.setModified(False)
+            self._address.edit.setModified(False)
+            self._address.finish()
             tab.view.load(QUrl(url))
             tab.view.setFocus()
 
+        def focus_page(self):
+            tab = self._current()
+            if tab is not None:
+                tab.view.setFocus()
+
         def _on_focus_address(self):
-            if self._chrome.isVisible():
-                self._address.setFocus(Qt.FocusReason.ShortcutFocusReason)
-                self._address.selectAll()
+            if self._toolbar.isVisible():
+                self._address.begin(select_all=True)
+
+        def toggle_bookmark(self):
+            tab = self._current()
+            if tab is None:
+                return
+            url = tab.url()
+            store = self._application.store
+            if store.is_bookmarked(url):
+                store.remove_bookmark(url)
+            elif store.add_bookmark(url, tab.view.title()):
+                self._show_bubble("Bookmarked")
+                QTimer.singleShot(1500, lambda: self._show_bubble(""))
+            self.refresh_toolbar()
+
+        # ---- misc actions ----
 
         def _on_reload(self):
             tab = self._current()
@@ -1368,32 +2689,26 @@ def main(argv=None):
             self.add_tab(HOME_URL)
 
         def _on_close_tab(self):
-            self._close_tab_at(self._tab_bar.currentIndex())
-
-        def _on_toggle_bookmark(self):
-            tab = self._current()
-            if tab is None:
-                return
-            url = tab.view.url().toString()
-            store = self._application.store
-            if store.is_bookmarked(url):
-                store.remove_bookmark(url)
-            elif store.add_bookmark(url, tab.view.title()):
-                self._show_bubble("Bookmarked")
-                QTimer.singleShot(1500, lambda: self._show_bubble(""))
-            self.refresh_toolbar()
+            self.close_tab_at(self._tab_bar.currentIndex())
 
         def _show_library(self, kind):
             dialog = LibraryDialog(self, kind)
             dialog.setAttribute(Qt.WidgetAttribute.WA_DeleteOnClose)
             dialog.show()
 
-        def _on_show_downloads(self):
-            self._application.downloads.show_under(self._downloads_button)
-
         def _on_make_default(self):
             path = make_default_browser()
             QMessageBox.information(self, "Default Browser", "CottonCandy now opens web links.\n({})".format(path))
+
+        def _on_clear_data(self):
+            answer = QMessageBox.question(
+                self, "Clear Cookies and Cache",
+                "Sign out of every site and delete cached files? History, bookmarks and downloads stay.")
+            if answer == QMessageBox.StandardButton.Yes:
+                self._profile.cookieStore().deleteAllCookies()
+                self._profile.clearHttpCache()
+                self._show_bubble("Cookies and cache cleared")
+                QTimer.singleShot(2000, lambda: self._show_bubble(""))
 
         def _zoom(self, step):
             tab = self._current()
@@ -1401,6 +2716,12 @@ def main(argv=None):
                 return
             factor = 1.0 if step is None else round(tab.view.zoomFactor() + step, 2)
             tab.view.setZoomFactor(min(5.0, max(0.25, factor)))
+            self._sync_zoom_label()
+
+        def _sync_zoom_label(self):
+            tab = self._current()
+            if tab is not None:
+                self._zoom_value.setText("{}%".format(round(tab.view.zoomFactor() * 100)))
 
         def _on_devtools(self):
             tab = self._current()
@@ -1410,13 +2731,42 @@ def main(argv=None):
                 view = QWebEngineView()
                 view.setPage(QWebEnginePage(self._profile, view))
                 tab.page.setDevToolsPage(view.page())
-                view.setWindowTitle("Developer Tools — {}".format(tab.view.title() or tab.view.url().toString()))
+                view.setWindowTitle("Developer Tools — {}".format(tab.view.title() or tab.url()))
                 view.resize(1000, 640)
                 view.setAttribute(Qt.WidgetAttribute.WA_DeleteOnClose)
                 view.destroyed.connect(lambda *_args: setattr(tab, "devtools", None))
                 tab.devtools = view
             tab.devtools.show()
             tab.devtools.raise_()
+
+        def _on_fullscreen_requested(self, request):
+            request.accept()
+            self._set_fullscreen(request.toggleOn())
+
+        def _set_fullscreen(self, on):
+            self._tab_row.setVisible(not on)
+            self._toolbar.setVisible(not on)
+            self.hide_overlays()
+            if on:
+                self.showFullScreen()
+            else:
+                self.showNormal()
+
+        def _on_toggle_fullscreen(self):
+            self._set_fullscreen(not self.isFullScreen())
+
+        def toggle_maximized(self):
+            self.showNormal() if self.isMaximized() else self.showMaximized()
+
+        def _show_bubble(self, text):
+            if not text:
+                self._bubble.hide()
+                return
+            self._bubble.setText(text if len(text) <= 160 else text[:157] + "…")
+            self._bubble.adjustSize()
+            self._bubble.move(8, self._stack.height() - self._bubble.height() - 8)
+            self._bubble.raise_()
+            self._bubble.show()
 
         # ---- find ----
 
@@ -1429,17 +2779,24 @@ def main(argv=None):
             tab = self._current()
             if tab is None:
                 return
-            flags = QWebEnginePage.FindFlag.FindBackward if backward else QWebEnginePage.FindFlag(0)
+            flags = QWebEnginePage.FindFlag(0)
+            if backward:
+                flags |= QWebEnginePage.FindFlag.FindBackward
+            if self._match_case.isChecked():
+                flags |= QWebEnginePage.FindFlag.FindCaseSensitively
             tab.page.findText(self._find_entry.text(), flags)
             if not self._find_entry.text():
-                self._find_count.setText("")
+                self._set_find_count("", False)
+
+        def _set_find_count(self, text, none):
+            self._find_count.setText(text)
+            self._find_count.setProperty("none", none)
+            repolish(self._find_count)
 
         def _on_find_result(self, result):
             if self._find_entry.text():
                 count = result.numberOfMatches()
-                self._find_count.setText(
-                    "{} of {}".format(result.activeMatch(), count) if count else "No matches"
-                )
+                self._set_find_count("{} of {}".format(result.activeMatch(), count) if count else "No matches", not count)
 
         def _close_find(self):
             if self._find_bar.isVisible():
@@ -1449,10 +2806,87 @@ def main(argv=None):
                     tab.page.findText("")
                     tab.view.setFocus()
 
-        # ---- lifetime ----
+        # ---- overlays, theme, lifetime ----
+
+        def permission_card_open(self):
+            return self._site_card.isVisible() and getattr(self._site_card, "kind", None) == "permission"
+
+        def sync_scrim(self):
+            """Show the click-catching scrim under open popovers (not for a permission card, which must be answered)."""
+            if not hasattr(self, "_scrim"):
+                return
+            closable = [o for o in self._overlays if o.isVisible() and getattr(o, "kind", None) != "permission"]
+            self._escape.setEnabled(any(o.isVisible() for o in self._overlays))
+            if closable:
+                self._scrim.setGeometry(self.centralWidget().rect())
+                self._scrim.show()
+                self._scrim.raise_()
+                for overlay in self._overlays:
+                    if overlay.isVisible():
+                        overlay.raise_()
+            else:
+                self._scrim.hide()
+
+        def _place_grips(self):
+            width, height = self.centralWidget().width(), self.centralWidget().height()
+            size, corner = 4, 12
+            geometry = [(0, corner, size, height - 2 * corner), (width - size, corner, size, height - 2 * corner),
+                        (corner, 0, width - 2 * corner, size), (corner, height - size, width - 2 * corner, size),
+                        (0, height - corner, corner, corner), (width - corner, height - corner, corner, corner)]
+            resizable = not (self.isMaximized() or self.isFullScreen())
+            for grip, rect in zip(self._grips, geometry):
+                grip.setGeometry(*rect)
+                grip.setVisible(resizable)
+                grip.raise_()
+
+        def hide_overlays(self):
+            """Hide every popover without answering anything (switching tabs, resizing)."""
+            for overlay in self._overlays:
+                overlay.hide()
+
+        def dismiss_overlays(self, escape=False):
+            """A click outside closes popovers. A permission card only goes away when answered; Esc answers Deny."""
+            for overlay in self._overlays:
+                if not overlay.isVisible():
+                    continue
+                if overlay is self._site_card and getattr(overlay, "kind", None) == "permission":
+                    tab = self._current()
+                    if escape and tab is not None and tab.permissions:
+                        self._answer_permission(tab, tab.permissions[0], False)
+                    continue
+                overlay.hide()
+            if self._address.editing:
+                self._address.cancel()
+
+        def any_overlay(self):
+            return any(overlay.isVisible() for overlay in self._overlays)
+
+        def apply_theme(self):
+            for overlay in self._overlays:
+                shadow(overlay)
+            self._lights.update()
+            self.refresh_tab_buttons()
+            self.refresh_toolbar()
+            for tab in self._tabs:
+                if url_scheme(tab.url()) == INTERNAL_SCHEME:
+                    tab.view.reload()
+                elif tab.error_url:
+                    tab.view.load(QUrl(tab.error_url))
+            if self._downloads_card.isVisible():
+                self.refresh_downloads()
+
+        def changeEvent(self, event):
+            if event.type() == QEvent.Type.ActivationChange:
+                self._lights.update()
+            super().changeEvent(event)
 
         def resizeEvent(self, event):
             super().resizeEvent(event)
+            self._relayout_tabs()
+            self._place_progress()
+            self._place_grips()
+            self.hide_overlays()
+            QTimer.singleShot(0, self._show_pending_permission)
             if self._bubble.isVisible():
                 self._bubble.move(8, self._stack.height() - self._bubble.height() - 8)
 
@@ -1473,9 +2907,7 @@ def main(argv=None):
             self.setApplicationName(APP_NAME)
             self.setDesktopFileName(APP_ID)
             self.setStyle(QStyleFactory.create("Fusion"))
-            self.setPalette(self._palette())
             self.setFont(QFont(DEFAULT_FONT, 10))
-            self.setStyleSheet(stylesheet(accent))
             # Installed: the icon theme has it. From a checkout: the SVG next to this script.
             beside = os.path.join(os.path.dirname(os.path.realpath(__file__)), APP_ID + ".svg")
             self.setWindowIcon(QIcon.fromTheme(APP_ID, QIcon(beside) if os.path.exists(beside) else QIcon()))
@@ -1483,54 +2915,177 @@ def main(argv=None):
             self.server = None
             self.store = None
             self.profile = None
-            self.downloads = None
+            self.downloads = []
+            self.recently_closed = []
+            self.spin_step = 0
+            self._handlers = []
+            self._icons = {}
+            self._taken_paths = set()
+            self._spinner = QTimer(self)
+            self._spinner.setInterval(80)
+            self._spinner.timeout.connect(self._spin)
+            self._download_timer = QTimer(self)
+            self._download_timer.setInterval(500)
+            self._download_timer.timeout.connect(self._update_download_buttons)
+            self.apply_theme(initial=True)
 
         def start(self):
             self.store = Store(os.path.join(data_directory(), "cottoncandy.db"))
             self.profile = QWebEngineProfile("cottoncandy", self)
             self.profile.setPersistentStoragePath(os.path.join(data_directory(), "profile"))
             self.profile.setCachePath(cache_directory())
-            self.configure_profile(self.profile)
-            self.downloads = DownloadsPanel()
+            self.configure_profile(self.profile, private=False)
+            # Follow GraceOS: Settings → Appearance writes ~/.config/grace/desktop.conf.
+            self._watcher = QFileSystemWatcher(self)
+            os.makedirs(os.path.dirname(conf_path), exist_ok=True)
+            self._watcher.addPath(os.path.dirname(conf_path))
+            if os.path.exists(conf_path):
+                self._watcher.addPath(conf_path)
+            self._watcher.directoryChanged.connect(self._grace_changed)
+            self._watcher.fileChanged.connect(self._grace_changed)
 
-        def configure_profile(self, profile):
+        def configure_profile(self, profile, private):
             settings = profile.settings()
             attributes = QWebEngineSettings.WebAttribute
             settings.setAttribute(attributes.JavascriptCanOpenWindows, False)  # pop-ups need a click
             settings.setAttribute(attributes.LocalContentCanAccessRemoteUrls, False)
             settings.setAttribute(attributes.FullScreenSupportEnabled, True)
             settings.setAttribute(attributes.ScreenCaptureEnabled, True)  # still asks first
+            settings.setAttribute(attributes.ErrorPageEnabled, False)  # CottonCandy draws its own
             # Qt drops unknown schemes that scripts start. Clicked ones reach CottonPage.acceptNavigationRequest,
             # which hands mailto: to the mail app and refuses the rest (returning False stops Qt's xdg-open).
             settings.setUnknownUrlSchemePolicy(
                 QWebEngineSettings.UnknownUrlSchemePolicy.AllowUnknownUrlSchemesFromUserInteraction
             )
-            profile.setPersistentPermissionsPolicy(QWebEngineProfile.PersistentPermissionsPolicy.StoreInMemory)
+            # "Allow once" means once: nothing is remembered, so a site asks again next time.
+            profile.setPersistentPermissionsPolicy(QWebEngineProfile.PersistentPermissionsPolicy.AskEveryTime)
             profile.setSpellCheckEnabled(False)
-            profile.downloadRequested.connect(lambda request: self.downloads.add(request))
+            profile.downloadRequested.connect(self._on_download)
+            handler = SchemeHandler(self, private)
+            self._handlers.append(handler)
+            profile.installUrlSchemeHandler(INTERNAL_SCHEME.encode(), handler)
 
-        def _palette(self):
+        def _grace_changed(self, *_args):
+            if os.path.exists(conf_path) and conf_path not in self._watcher.files():
+                self._watcher.addPath(conf_path)  # editors replace the file, which drops the watch
+            if read_grace():
+                self.apply_theme()
+
+        def apply_theme(self, initial=False):
+            icon_cache.clear()
+            tokens = tok()
+            self.setPalette(self._palette(tokens))
+            self.setStyleSheet(stylesheet(theme["accent"], theme["style"]))
+            try:  # Pages that follow prefers-color-scheme match GraceOS (Qt 6.8+).
+                self.styleHints().setColorScheme(Qt.ColorScheme.Dark if theme["style"] == "dark" else Qt.ColorScheme.Light)
+            except AttributeError:
+                pass
+            if initial:
+                return
+            for widget in self.allWidgets():
+                spec = getattr(widget, "_cc_icon", None)
+                if spec is not None:
+                    widget.setIcon(icon(*spec))
+            for window in self.windows:
+                for action in window.findChildren(QAction):
+                    spec = getattr(action, "_cc_icon", None)
+                    if spec is not None:
+                        action.setIcon(icon(*spec))
+                window.apply_theme()
+
+        def _palette(self, tokens):
             palette = QPalette()
             roles = QPalette.ColorRole
             for role, value in (
-                (roles.Window, WINDOW),
-                (roles.WindowText, TEXT),
-                (roles.Base, BACKGROUND),
-                (roles.AlternateBase, PANEL),
-                (roles.Text, TEXT),
-                (roles.Button, WINDOW),
-                (roles.ButtonText, TEXT_CONTROL),
-                (roles.ToolTipBase, PANEL),
-                (roles.ToolTipText, TEXT),
-                (roles.PlaceholderText, TEXT_TERTIARY),
-                (roles.Highlight, ACCENTS[accent]["fill"]),
+                (roles.Window, tokens["window"]),
+                (roles.WindowText, tokens["text"]),
+                (roles.Base, tokens["desktop"]),
+                (roles.AlternateBase, tokens["sidebar"]),
+                (roles.Text, tokens["text"]),
+                (roles.Button, tokens["window"]),
+                (roles.ButtonText, tokens["text_control"]),
+                (roles.ToolTipBase, tokens["panel"]),
+                (roles.ToolTipText, tokens["text"]),
+                (roles.PlaceholderText, tokens["text_secondary"]),  # AA on the field; text_tertiary isn't
+                (roles.Highlight, tokens["accent_fill"]),
                 (roles.HighlightedText, "#ffffff"),
-                (roles.Link, accent_fg),
+                (roles.Link, tokens["accent_text"]),
             ):
                 palette.setColor(role, QColor(value))
-            palette.setColor(QPalette.ColorGroup.Disabled, roles.Text, QColor(TEXT_TERTIARY))
-            palette.setColor(QPalette.ColorGroup.Disabled, roles.ButtonText, QColor(TEXT_TERTIARY))
+            palette.setColor(QPalette.ColorGroup.Disabled, roles.Text, QColor(tokens["text_tertiary"]))
+            palette.setColor(QPalette.ColorGroup.Disabled, roles.ButtonText, QColor(tokens["text_tertiary"]))
             return palette
+
+        def ensure_spinner(self):
+            if not self._spinner.isActive():
+                self._spinner.start()
+
+        def _spin(self):
+            self.spin_step += 1
+            busy = False
+            for window in self.windows:
+                for tab in window._tabs:
+                    if tab.loading:
+                        busy = True
+                        tab.label.icon.setPixmap(spinner_frame(self.spin_step).pixmap(16, 16))
+            if not busy:
+                self._spinner.stop()
+
+        def downloads_directory(self):
+            directory = QStandardPaths.writableLocation(QStandardPaths.StandardLocation.DownloadLocation)
+            directory = directory or os.path.join(os.path.expanduser("~"), "Downloads")
+            os.makedirs(directory, exist_ok=True)
+            return directory
+
+        def _on_download(self, request):
+            directory = self.downloads_directory()
+            name = safe_download_name(request.suggestedFileName() or request.downloadFileName())
+            path = unique_path(directory, name, self._taken_paths)
+            self._taken_paths.add(path)
+            request.setDownloadDirectory(directory)
+            request.setDownloadFileName(os.path.basename(path))
+            request.accept()
+            download = Download(request, path)
+            self.downloads.insert(0, download)
+            del self.downloads[20:]
+            request.stateChanged.connect(lambda _state: self._taken_paths.discard(path) if not download.running() else None)
+            self._download_timer.start()
+            self._update_download_buttons()
+            for window in self.windows:
+                if window.isActiveWindow():
+                    window._show_bubble("Downloading {}".format(os.path.basename(path)))
+                    QTimer.singleShot(2500, lambda w=window: w._show_bubble(""))
+                if window._downloads_card.isVisible():
+                    window.refresh_downloads()
+
+        def _update_download_buttons(self):
+            running = [d for d in self.downloads if d.running()]
+            total = sum(d.request.totalBytes() for d in running if d.request.totalBytes() > 0)
+            received = sum(d.request.receivedBytes() for d in running if d.request.totalBytes() > 0)
+            fraction = None if not running else (received / total if total else 0.0)
+            for window in self.windows:
+                window._downloads_button.set_progress(fraction)
+                if window._downloads_card.isVisible():
+                    for row in window._downloads_card.findChildren(DownloadRow):
+                        row.refresh()
+            if not running:
+                self._download_timer.stop()
+
+        def known_icon(self, url):
+            host = _host(url)
+            if not host:
+                return None
+            if host not in self._icons:
+                png = self.store.icon_for(url)
+                pixmap = QPixmap()
+                self._icons[host] = QIcon(pixmap) if png and pixmap.loadFromData(png, "PNG") else None
+            return self._icons[host]
+
+        def forget_icon(self, url):
+            self._icons.pop(_host(url), None)
+
+        def remember_closed(self, url, title):
+            self.recently_closed = [(url, title)] + [entry for entry in self.recently_closed if entry[0] != url][:9]
 
         def listen(self, path):
             self.server = QLocalServer(self)
