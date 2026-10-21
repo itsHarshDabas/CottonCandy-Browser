@@ -11,7 +11,7 @@ makedepends=(git make)
 checkdepends=(python-pytest desktop-file-utils)
 optdepends=(
   'xdg-utils: hand mailto: links to the mail app'
-  'cherrycola: summarize pages with a local model (from the GraceOS repo)'
+  'cherrycola: Grace, the local AI that summarizes and answers about pages (from the GraceOS repo)'
 )
 provides=(cottoncandy)
 conflicts=(cottoncandy)

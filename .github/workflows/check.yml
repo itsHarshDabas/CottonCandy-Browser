@@ -20,4 +20,7 @@ jobs:
           assert hasattr(QWebEngineLoadingInfo.ErrorDomain, 'CertificateErrorDomain');
           assert all(hasattr(QWebEnginePage, n) for n in ('loadingChanged', 'recentlyAudibleChanged', 'permissionRequested'));
           assert hasattr(QWindow, 'startSystemMove') and hasattr(QStyleHints, 'setColorScheme');
+          from PySide6.QtWebEngineCore import QWebEngineScript; from PySide6.QtCore import QProcess; from PySide6.QtWidgets import QPlainTextEdit;
+          assert int(QWebEngineScript.ScriptWorldId.ApplicationWorld.value) == 1;
+          assert hasattr(QProcess.ProcessError, 'FailedToStart') and hasattr(QProcess, 'startDetached');
           print('pyside6 + qt6-webengine OK')"
