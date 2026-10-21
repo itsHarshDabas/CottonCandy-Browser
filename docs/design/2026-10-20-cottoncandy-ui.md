@@ -336,12 +336,24 @@ The app was first built as v0 ([itsHarshDabas/CottonCandy-Browser#1](https://git
    - The settings page is **not** built (see below).
 9. **Find bar:** Match case, "1 of 2", and "No matches" in `error`.
 10. **Light theme and live theming:** it follows `style` and `accent` in `~/.config/grace/desktop.conf`, and sets the color scheme sites see. Placeholders use `textSecondary`.
+11. **Grace (Phase 4), with AI on only.** It follows `ai` in `desktop.conf` live.
+    - The sparkle in row 2, the Grace menu item and Ctrl+Shift+G open a 320 px panel in `sidebar` color.
+    - **Chip:** "Local AI · on this device · <model>", from `cherrycola status --json`.
+    - **Actions:** Summarize this page, Ask about this page (the field doubles as "Ask a follow-up"), and on CottonCandy's error pages, Explain this error. Results are a plain-text card with Copy and Stop, and the permanent note.
+    - **Other AI touches:** the address dropdown ends with "Ask Grace about '…'"; error pages get an "Explain this error" link; and the new tab page has the Local AI chip, with a hint that points to the address bar.
+    - **How it runs:** only through `cherrycola ask -`, with the prompt on stdin. Page text (the first 6,000 characters of `innerText`, read in the isolated `ApplicationWorld`) is quoted between markers as data, and the task is repeated after it.
+    - **Local only:** if `cherrycola.conf` points `ollama_url` or `lmstudio_url` at another computer, the chip turns into "Not on this device · host" and every action stays off. This is stricter than §3.8's "Remote" chip.
+    - **Missing model:** a "Download the model" button runs `cherrycola pull` in the user's terminal through `grace-launch`, as the shell's AI page does.
 
 **Not built yet:**
 - The settings page (`cottoncandy://settings`).
 - The recording dot and the attention dot on tabs.
 - The bookmarks bar, vertical tabs and the compact header.
-- The Grace panel and other AI touches (Phase 4: opt-in, local `cherrycola` only).
+- From the Grace panel (§3.8):
+  - Compare tabs, and Explain this doc (PDFs and other non-HTML documents).
+  - Send selection to an agent, and the Remote chip. Grace sends nothing off this computer.
+  - The slide-in motion: the panel just appears.
+- On the new tab page, Tab to ask instead of search: the page runs no scripts. Use the address bar row instead.
 
 ## 8. Open questions
 - **Minimize on Hyprland:** Hyprland has no native minimize. GraceOS sets `close,minimize,maximize:`, so how does the shell treat "minimize": a special workspace or a dock stash? CottonCandy should call the same thing.
