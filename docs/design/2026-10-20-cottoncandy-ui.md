@@ -195,6 +195,7 @@ These are the worst cases across all nine accents, from `contrast.py`.
   - Rows are 34 tall: favicon, title, then the host in `textSecondary`. The matched text is weight 600, not colored.
   - The keyboard-selected row is `selected`; hover is `controlHover`.
   - With AI on and some text typed, the Search group ends with "Ask Grace about '…' · Local AI · on this device", with the sparkle icon.
+  - When the text is a search (not an address), "Enhance search with Grace · Local AI · on this device" comes just before it. Picking it sends only the typed words to the local model, shows "Grace is improving '…'… · Esc stops", then puts Grace's version in the field with two groups: "Improved by Grace" (selected, so Enter searches it) and "As you typed it". If Grace can't help (no CherryCola, no model, server down, a remote server, over a minute, or no usable reply), a "Grace" row says why and the typed words stay selected to search.
   - Nothing is sent while typing. Suggestions come only from local history, bookmarks and open tabs.
 - **Page-load progress:** a 2 px line in accent `fill` on `track`, along the bottom edge of the chrome.
 
@@ -281,13 +282,13 @@ Only in the mockup: the private window, the offline page, the certificate error,
 ## 5. AI rules
 - AI lives in four places only:
   - The toolbar sparkle and its panel.
-  - One row in the address dropdown.
+  - Two rows in the address dropdown: "Enhance search with Grace" and "Ask Grace".
   - The new tab page field and its hint.
   - "Explain this error" on error pages.
 - **Nothing runs or is sent without a click.** Page text goes to the model only after the user picks an action. Sending to an agent always uses the approval card.
 - **Page content is untrusted:** results are text only. Links and commands that appear in a result do nothing until the user acts on them.
 - **AI off** (the GraceOS master switch):
-  - The sparkle, the panel, the Grace menu item, the dropdown row and "Explain this error" disappear.
+  - The sparkle, the panel, the Grace menu item, the dropdown rows and "Explain this error" disappear.
   - The new tab page field becomes plain search.
   - The settings row explains where AI is turned on.
   - Nothing else moves or breaks.
