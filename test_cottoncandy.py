@@ -639,3 +639,58 @@ def test_internal_pages_show_grace_only_with_ai():
     assert 'href="cottoncandy://explain"' in error_on and "Explain this error" in error_on
     assert "explain" not in error_off
     assert "<script" not in error_on and "<script" not in on
+
+
+def test_build_suggestions_offers_enhance_for_searches_only():
+    kinds = [row["kind"] for row in cottoncandy.build_suggestions("best way learn rust", ai=True)]
+    assert kinds == ["search", "enhance", "ask"]
+    # An address isn't a search, so there's nothing for Grace to improve.
+    assert "enhance" not in [row["kind"] for row in cottoncandy.build_suggestions("github.com", ai=True)]
+    assert "enhance" not in [row["kind"] for row in cottoncandy.build_suggestions("localhost:8000", ai=True)]
+    assert "enhance" not in [row["kind"] for row in cottoncandy.build_suggestions("best way learn rust")]
+
+
+def test_enhanced_suggestions_put_graces_version_first():
+    rows = cottoncandy.enhanced_suggestions("rust learn best", "learn rust programming beginner guide")
+    assert rows[0] == {"group": "Improved by Grace", "title": "learn rust programming beginner guide",
+                       "url": "https://duckduckgo.com/?q=learn+rust+programming+beginner+guide", "kind": "search", "enhanced": True}
+    assert rows[1]["url"] == "https://duckduckgo.com/?q=rust+learn+best" and rows[1]["kind"] == "search"
+    assert len(cottoncandy.enhanced_suggestions("Rust", "rust")) == 1
+
+
+def test_enhance_query_prompt_sends_only_the_words():
+    prompt = cottoncandy.enhance_query_prompt("  how   fix\nwifi arch  ")
+    assert prompt.endswith("\nSearch: how fix wifi arch")
+    assert "one line" in prompt and "Don't answer" in prompt
+    assert len(cottoncandy.enhance_query_prompt("x" * 5000)) < 1000
+
+
+@pytest.mark.parametrize("output, expected", [
+    ("arch linux wifi not working networkmanager\n", "arch linux wifi not working networkmanager"),
+    ('Query: "arch linux install nvidia drivers"\nThis is better because…', "arch linux install nvidia drivers"),
+    ("**Improved query:** hyprland screen sharing wayland", "hyprland screen sharing wayland"),
+    ("1. rust async tutorial\n2. tokio guide", "rust async tutorial"),
+    ("<think>the user wants</think>\n\n  python list comprehension  ", "python list comprehension"),
+    ("“qwen3 4b benchmark”", "qwen3 4b benchmark"),
+    ('"vim" vs "emacs"', '"vim" vs "emacs"'),
+    ("Here are some better searches:", None),
+    ("", None),
+    ("   \n  \n", None),
+    ("x" * 400, None),
+    ("ls\x1b[31m -la\x07 meaning", "ls [31m -la meaning"),
+])
+def test_clean_enhanced_query(output, expected):
+    assert cottoncandy.clean_enhanced_query(output, "typed") == expected
+
+
+def test_model_server_host_covers_llamacpp():
+    assert cottoncandy.model_server_host("llamacpp_url = http://127.0.0.1:11436") is None
+    assert cottoncandy.model_server_host("llamacpp_url = http://gpu-box.lan:11436") == "gpu-box.lan"
+    assert cottoncandy.model_server_host("llamacpp_url = http://gpu-box.lan:11436", "ollama") is None
+    assert cottoncandy.grace_status('{"backend": "llamacpp", "model": "qwen3", "reachable": true}')["backend"] == "llamacpp"
+
+
+def test_newtab_mentions_enhance_only_with_ai():
+    tokens = cottoncandy.theme_tokens()
+    assert "Enhance search with Grace" in cottoncandy.newtab_html(tokens, ai=True)
+    assert "Enhance" not in cottoncandy.newtab_html(tokens)

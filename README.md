@@ -15,6 +15,7 @@ These are the real app, captured from test runs under Xvfb.
 | ![Find in page](docs/screenshots/find.png) | ![Many tabs](docs/screenshots/tabs-crowded.png) |
 | ![Grace summarizing a page](docs/screenshots/grace-panel.png) | ![Grace explaining an error](docs/screenshots/grace-explain.png) |
 | ![Ask Grace from the address bar](docs/screenshots/grace-ask.png) | ![AI off: no sparkle, no chip](docs/screenshots/ai-off-newtab.png) |
+| ![Enhance search with Grace](docs/screenshots/grace-enhance.png) | ![Grace's improved search, ready for Enter](docs/screenshots/grace-enhanced.png) |
 
 The Grace answers in these screenshots come from a stand-in model server that returns canned text, not from a real model.
 
@@ -52,10 +53,12 @@ The design behind it:
   - These pages run no scripts and load nothing from the network.
 - **Grace, the local AI** (only while AI is on in GraceOS Settings → AI & Models):
   - The sparkle in the toolbar (or Ctrl+Shift+G) opens a side panel that can **summarize this page**, **answer a question about it**, or **explain an error page**. In the address bar, "Ask Grace about '…'" asks a plain question with no page attached.
-  - It runs only through [CherryCola](https://github.com/itsHarshDabas/CherrySoda) on this computer (`cherrycola ask -`, with Ollama or LM Studio). The chip shows the model in use.
+  - **Enhance search:** when you type a search (not an address), "Enhance search with Grace" rewrites it as a better search query with the local model: fixed spelling, precise names and keywords. Grace's version replaces the text in the address bar, selected, so Enter searches it, and your words as typed stay one row below. Esc stops it. Only the typed words go to the model, and nothing is searched until you press Enter.
+  - If Grace can't help (CherryCola not installed, the model not downloaded, the model server down or on another machine, no answer within a minute, or a reply that isn't a usable query), the dropdown says why and your words stay ready to search. Searching never waits on Grace.
+  - It runs only through [CherryCola](https://github.com/itsHarshDabas/CherryCola) on this computer (`cherrycola ask -`, with Ollama, LM Studio or llama.cpp). The chip shows the model in use.
   - Nothing is read or sent until you click. The answer streams into a plain-text card with Copy and Stop.
   - If the model isn't downloaded, "Download the model" runs `cherrycola pull` in your terminal.
-  - With `ai = off`, the sparkle, the panel, the menu item, the address-bar row and "Explain this error" all disappear, live. Everything else works the same.
+  - With `ai = off`, the sparkle, the panel, the menu item, the address-bar rows and "Explain this error" all disappear, live. Everything else works the same.
 - **Grace look:** dark and light themes from the GraceOS design tokens, the shell's line icons, and the accent.
   - It follows `style` and `accent` in `~/.config/grace/desktop.conf` live: change them in Grace Settings and every window re-themes.
   - Sites that support `prefers-color-scheme` follow GraceOS too.
@@ -73,7 +76,7 @@ Page content is untrusted. These defaults aren't settings you can change:
   - Anything else a site asks for is denied without asking.
 - **Downloads are never opened by the browser,** only shown in their folder.
 - **Grace never sends page text off this computer.**
-  - If `~/.config/grace/cherrycola.conf` points CherryCola at a model server on another machine, Grace stays off and says why.
+  - If `~/.config/grace/cherrycola.conf` points CherryCola at a model server on another machine (`ollama_url`, `lmstudio_url` or `llamacpp_url`), Grace stays off and says why. That includes Enhance search, so typed searches don't leave the computer either.
   - Page text goes in the prompt on stdin, never on a command line, quoted between markers as untrusted data (markers inside the page are removed).
   - The page is read in Qt's isolated script world, so the page's own scripts can't see or change that read.
   - The answer is plain text: links, HTML and commands in it are only text. A page can still try to mislead the model; the panel says so.
@@ -139,6 +142,15 @@ On 2026-10-21, Grace was run the same way. The real `cherrycola` CLI (CherrySoda
 - **Remote server:** with `ollama_url = http://gpu-box.lan:11434`, the chip read "Not on this device · gpu-box.lan", the actions were off, and a click sent nothing.
 - **AI switch:** `ai = off` removed the sparkle, the panel, Ctrl+Shift+G and the address-bar row live, and setting it back to `on` restored them.
 
-Not checked yet: Wayland/Hyprland (including how the frameless window and its traffic lights behave there), video codecs, camera and microphone (the test machine had none), audio indicators, Arch's own packages, and Grace with a real model (the quality of its summaries, and how long a small model takes on a long page).
+On 2026-11-23, Enhance search was run the same way (PySide6 6.12.0 from PyPI, Xvfb, openbox, xdotool, as a normal user), with a stand-in `cherrycola` script that logged its stdin and answered like a small model: `Query: "…"` followed by an explanation line. What was seen:
+- **The row:** typing "wifi broken arch after sleep" showed "Enhance search with Grace" between the DuckDuckGo row and "Ask Grace". An address such as `github.com` doesn't get it.
+- **One request, words only:** picking it ran `cherrycola ask -` once. Its stdin was the rewrite instruction and `Search: wifi broken arch after sleep`, nothing else.
+- **While it runs:** "Grace is improving '…'… · Esc stops", with the typed search still one row below.
+- **The result:** the label, quotes and explanation were dropped. The field read "arch linux wifi not working after suspend networkmanager fix", selected under "Improved by Grace", and Enter loaded `duckduckgo.com/?q=arch+linux+wifi+not+working+after+suspend+networkmanager+fix`.
+- **Esc:** with an answer that never came, Esc killed the `cherrycola` process and left "rust tutorial" ready to search.
+- **Failures:** model not downloaded (exit 3), server down (exit 2), `cherrycola` not on PATH, and `ollama_url = http://gpu-box.lan:11434` each showed a "Grace" row saying why above the typed search. With the remote server, `cherrycola` wasn't run at all.
+- **AI off:** with `ai = off`, the dropdown showed only the DuckDuckGo row.
+
+Not checked yet: Wayland/Hyprland (including how the frameless window and its traffic lights behave there), video codecs, camera and microphone (the test machine had none), audio indicators, Arch's own packages, and Grace with a real model (the quality of its summaries and rewritten searches, and how long a small model takes on a long page).
 
 ![chrome://sandbox and the find bar](docs/screenshots/sandbox-and-find.png)
