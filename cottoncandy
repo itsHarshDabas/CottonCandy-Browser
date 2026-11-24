@@ -540,12 +540,17 @@ def clean_enhanced_query(output, original=""):
 def grace_failure(exit_code, stderr=""):
     """Why a cherrycola run failed, as (kind, message) for the panel. exit_code None: it didn't start."""
     lines = [line.strip() for line in (stderr or "").splitlines() if line.strip()]
-    detail = re.sub(r"^CherryCola:\s*", "", lines[-1]) if lines else ""
+    lines = [line for line in lines if not re.fullmatch(r"\(.*\)", line)]  # "(loading qwen3:4b)" status lines
+    detail = re.sub(r"^CherryCola(?:LLM)?:\s*", "", lines[-1], flags=re.I) if lines else ""
     detail = detail[:1].upper() + detail[1:]
     if exit_code is None or exit_code == 127:
-        return "not-installed", "CherryCola isn't installed. Install the cherrycola package and Ollama to use Grace."
+        return "not-installed", "CherryCola isn't installed. Install the cherrycolallm package and Ollama to use Grace."
     if exit_code == 3:
-        detail = re.sub(r"\.?\s*Run: cherrycola pull\S*$", ".", detail)
+        # Only Ollama models download with `cherrycola pull`; llama.cpp and LM Studio get theirs another way,
+        # and their message says how, so they get no Download button ("model-setup").
+        if not re.search(r"\bpull\b", detail):
+            return "model-setup", detail or "The model isn't set up yet."
+        detail = re.sub(r"\.?\s*Run: cherrycola(?:llm)? pull\S*$", ".", detail)
         return "model-missing", detail or "The model isn't downloaded yet."
     if exit_code == 2:
         return "unreachable", "Can't reach the local model server (Ollama, LM Studio or llama.cpp). " + (detail or "Is it running?")

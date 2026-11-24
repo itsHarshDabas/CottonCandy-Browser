@@ -588,6 +588,12 @@ def test_grace_prompt_kinds():
         (127, "", "not-installed", "CherryCola isn't installed"),
         (3, "CherryCola: the model qwen3:4b isn't downloaded yet (about 2.6 GB). Run: cherrycola pull", "model-missing",
          "The model qwen3:4b isn't downloaded yet (about 2.6 GB)."),
+        # What CherryColaLLM prints since the rename: the tail must still go, and the name prefix too.
+        (3, "(loading)\nCherryColaLLM: the model qwen3:4b isn't downloaded yet. Run: cherrycolallm pull", "model-missing",
+         "The model qwen3:4b isn't downloaded yet."),
+        # llama.cpp and LM Studio models don't come from `pull`: no Download button for them.
+        (3, "CherryColaLLM: no GGUF model named qwen. Get one with: cherrycolallm get OWNER/REPO:Q4_K_M", "model-setup",
+         "No GGUF model named qwen."),
         (2, "CherryCola: can't reach ollama at http://127.0.0.1:11434", "unreachable", "Can't reach the local model server"),
         (1, "starting\nCherryCola: ask needs a question\n", "error", "Ask needs a question"),
         (1, "", "error", "CherryCola stopped with exit code 1."),
@@ -597,7 +603,7 @@ def test_grace_failure(code, stderr, kind, start):
     got_kind, message = cottoncandy.grace_failure(code, stderr)
     assert got_kind == kind
     assert message.startswith(start)
-    assert "Run: cherrycola pull" not in message
+    assert "Run: cherrycola" not in message and "CherryColaLLM:" not in message
 
 
 def test_grace_status():
