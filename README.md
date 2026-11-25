@@ -114,7 +114,9 @@ cottoncandy --set-default    # optional
 ## Windows and Linux (Rust)
 `rust/` holds CottonCandy for Windows and Linux, written in Rust on Chromium through CEF. It has the same Grace, Shields and settings as this browser; see [docs/SECURITY.md](docs/SECURITY.md) for how it is secured.
 
-**Download** it from [Releases](https://github.com/itsHarshDabas/CottonCandy-Browser/releases): a zip for Windows and a `.tar.xz` for Linux, with `SHA256SUMS`. Pushing a tag like `v0.1.0` builds both, measures them and publishes the release (`.github/workflows/release.yml`).
+**Download** it from [Releases](https://github.com/itsHarshDabas/CottonCandy-Browser/releases): `CottonCandy-Setup-<version>.exe` or a zip for Windows, and a `.tar.xz` for Linux, with `SHA256SUMS`. Pushing a tag like `v1.0.0` (or `v1.0-beta`) builds them all, tests the installer, measures the browser and publishes the release (`.github/workflows/release.yml`).
+
+**The Windows installer** (`rust/installer`) installs for you alone, with no administrator needed, into `%LOCALAPPDATA%\Programs\CottonCandy` or a folder you pick (a folder like Program Files asks for administrator). It adds desktop and Start menu shortcuts if you want them, lists CottonCandy in Settings → Apps, and puts `uninstall.exe` in the install folder. The uninstaller removes only the files the installer wrote, and keeps your history, bookmarks and settings unless you tick the box to delete them. For scripted installs: `CottonCandy-Setup.exe --silent [--dir <folder>] [--no-desktop] [--no-start-menu]` and `uninstall.exe --silent [--remove-data]`. `rust/installer/pack.py` builds the installer from a release folder.
 
 **Import** from another browser in Settings → Import from another browser. It finds Chrome, Edge, Brave, Vivaldi, Opera, Chromium and Firefox profiles on Linux (including Flatpak and Snap) and Windows, and brings over bookmarks, history, open tabs and, if you like, extensions (installed again from their stores). It only reads the other browser's files. Passwords and cookies stay behind, because each browser encrypts them with its own key.
 

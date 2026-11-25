@@ -1,12 +1,12 @@
 name: release
-# Pushing a tag like v0.1.0 builds CottonCandy for Linux and Windows, measures its startup time and memory
+# Pushing a tag like v1.0.0 (or v1.0-beta) builds CottonCandy for Linux and Windows, plus the Windows installer, measures its startup time and memory
 # against Google Chrome on the same runner, and publishes a GitHub release with both packages, SHA256SUMS and
 # the measured numbers. On a pull request that changes it, or run by hand, it does everything except publish.
 on:
   push:
     tags: ["v*"]
   pull_request:
-    paths: [".github/workflows/release.yml", "rust/bench/**"]
+    paths: [".github/workflows/release.yml", "rust/bench/**", "rust/installer/**"]
   workflow_dispatch:
 permissions:
   contents: write
@@ -57,7 +57,9 @@ jobs:
         id: version
         run: |
           version=$(cargo metadata --no-deps --format-version 1 | python3 -c "import json,sys; print(next(p['version'] for p in json.load(sys.stdin)['packages'] if p['name'] == 'cottoncandy'))")
-          if [ "$GITHUB_REF_TYPE" = tag ] && [ "$GITHUB_REF_NAME" != "v$version" ]; then
+          # The tag may leave out a zero patch number: v1.0-beta for 1.0.0-beta.
+          short=$(echo "$version" | sed -E 's/^([0-9]+\.[0-9]+)\.0($|-)/\1\2/')
+          if [ "$GITHUB_REF_TYPE" = tag ] && [ "$GITHUB_REF_NAME" != "v$version" ] && [ "$GITHUB_REF_NAME" != "v$short" ]; then
             echo "The tag $GITHUB_REF_NAME doesn't match the version in rust/Cargo.toml ($version)." >&2
             exit 1
           fi
@@ -85,15 +87,51 @@ jobs:
             cp target/release/cottoncandy.exe "$out/"
             "$out/cottoncandy.exe" --version | tee /tmp/version.txt
             (cd ../dist && 7z a -tzip -mx=7 "$DIST.zip" "$DIST" > /dev/null)
+            # The installer: the setup program with the same folder appended.
+            python installer/pack.py target/release/cottoncandy-setup.exe "$out" "../dist/CottonCandy-Setup-${{ steps.version.outputs.version }}.exe"
           fi
           grep -q '^CottonCandy ' /tmp/version.txt
           ls -la ../dist
+      - name: Install, run and uninstall with the installer
+        if: runner.os == 'Windows'
+        shell: pwsh
+        working-directory: dist
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $setup = (Get-ChildItem CottonCandy-Setup-*.exe).FullName
+          $p = Start-Process $setup -ArgumentList '--silent', '--dir', "$env:RUNNER_TEMP\cc-test" -Wait -PassThru
+          if ($p.ExitCode -ne 0) { throw "The installer failed ($($p.ExitCode))" }
+          $dir = "$env:RUNNER_TEMP\cc-test\CottonCandy"
+          Start-Process "$dir\cottoncandy.exe" -ArgumentList '--version' -Wait -RedirectStandardOutput "$env:RUNNER_TEMP\v.txt"
+          $v = Get-Content "$env:RUNNER_TEMP\v.txt" -Raw
+          Write-Output $v
+          if ("$v" -notmatch '^CottonCandy ') { throw 'The installed browser did not start' }
+          if (-not (Test-Path "$dir\uninstall.exe")) { throw 'No uninstall.exe' }
+          $key = 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Uninstall\CottonCandy'
+          Get-ItemProperty $key | Format-List DisplayName, DisplayVersion, InstallLocation, UninstallString
+          $lnk = Join-Path ([Environment]::GetFolderPath('Desktop')) 'CottonCandy.lnk'
+          $menu = Join-Path ([Environment]::GetFolderPath('Programs')) 'CottonCandy.lnk'
+          if (-not (Test-Path $lnk) -or -not (Test-Path $menu)) { throw 'Shortcuts missing' }
+          Set-Content "$dir\my-notes.txt" 'mine'
+          $u = Start-Process "$dir\uninstall.exe" -ArgumentList '--silent' -Wait -PassThru
+          if ($u.ExitCode -ne 0) { throw "The uninstaller failed ($($u.ExitCode))" }
+          # It finishes from a copy in the temp folder, so wait for that.
+          for ($i = 0; $i -lt 60 -and (Test-Path "$dir\cottoncandy.exe"); $i++) { Start-Sleep 1 }
+          Start-Sleep 5
+          if (Test-Path "$dir\cottoncandy.exe") { throw 'The browser is still there' }
+          if (Test-Path "$dir\uninstall.exe") { throw 'uninstall.exe is still there' }
+          if (-not (Test-Path "$dir\my-notes.txt")) { throw 'The uninstaller removed a file it did not install' }
+          if (Test-Path $key) { throw 'Still listed in installed apps' }
+          if ((Test-Path $lnk) -or (Test-Path $menu)) { throw 'Shortcuts left behind' }
+          if (Get-ChildItem $env:TEMP -Filter 'cottoncandy-uninstall-*.exe') { throw 'The temporary uninstaller was not cleaned up' }
+          Write-Output 'Installed, ran and uninstalled cleanly.'
       - uses: actions/upload-artifact@v4
         with:
           name: ${{ matrix.target }}
           path: |
             dist/*.tar.xz
             dist/*.zip
+            dist/*.exe
           if-no-files-found: error
           compression-level: 0
 
@@ -144,13 +182,16 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           mkdir out
-          find artifacts \( -name '*.tar.xz' -o -name '*.zip' \) -exec mv {} out/ \;
+          find artifacts \( -name '*.tar.xz' -o -name '*.zip' -o -name '*.exe' \) -exec mv {} out/ \;
           (cd out && sha256sum * > SHA256SUMS)
           cat > notes.md <<EOF
           CottonCandy ${GITHUB_REF_NAME}, the GraceOS web browser on Chromium (CEF ${CEF_VERSION%%+*}), for Linux and Windows.
 
           ## Install
-          - **Windows:** unzip \`cottoncandy-*-windows-x86_64.zip\` anywhere and run \`cottoncandy.exe\`.
+          - **Windows:** run \`CottonCandy-Setup-*.exe\`. It installs for you alone (no administrator needed) into
+            a folder you can change, adds shortcuts, and lists CottonCandy in Settings → Apps; \`uninstall.exe\`
+            in the install folder removes it again. Windows may warn that the installer isn't signed: choose
+            *More info → Run anyway*. Or unzip \`cottoncandy-*-windows-x86_64.zip\` anywhere and run \`cottoncandy.exe\`.
           - **Linux:** \`tar -xJf cottoncandy-*-linux-x86_64.tar.xz\` and run \`./cottoncandy\`. Chromium's sandbox
             needs its helper to be owned by root: \`sudo chown root:root chrome-sandbox && sudo chmod 4755 chrome-sandbox\`
             in the unpacked folder (needed on Ubuntu 24.04 and other systems that restrict user namespaces).
@@ -163,4 +204,6 @@ jobs:
 
           See \`rust/bench/bench.py\` to measure it yourself.
           EOF
-          gh release create "$GITHUB_REF_NAME" --title "CottonCandy $GITHUB_REF_NAME" --notes-file notes.md out/*
+          pre=""
+          case "$GITHUB_REF_NAME" in *-*) pre="--prerelease" ;; esac
+          gh release create "$GITHUB_REF_NAME" $pre --title "CottonCandy $GITHUB_REF_NAME" --notes-file notes.md out/*
