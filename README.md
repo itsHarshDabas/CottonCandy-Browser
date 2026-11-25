@@ -157,3 +157,7 @@ On 2026-11-23, Enhance search was run the same way (PySide6 6.12.0 from PyPI, Xv
 Not checked yet: Wayland/Hyprland (including how the frameless window and its traffic lights behave there), video codecs, camera and microphone (the test machine had none), audio indicators, Arch's own packages, and Grace with a real model (the quality of its summaries and rewritten searches, and how long a small model takes on a long page).
 
 ![chrome://sandbox and the find bar](docs/screenshots/sandbox-and-find.png)
+
+## License
+
+CottonCandy is free software under the GNU General Public License, version 3 or (at your option) any later version. See [LICENSE](LICENSE).
