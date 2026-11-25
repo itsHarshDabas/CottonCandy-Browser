@@ -116,6 +116,8 @@ cottoncandy --set-default    # optional
 
 **Download** it from [Releases](https://github.com/itsHarshDabas/CottonCandy-Browser/releases): a zip for Windows and a `.tar.xz` for Linux, with `SHA256SUMS`. Pushing a tag like `v0.1.0` builds both, measures them and publishes the release (`.github/workflows/release.yml`).
 
+**Import** from another browser in Settings → Import from another browser. It finds Chrome, Edge, Brave, Vivaldi, Opera, Chromium and Firefox profiles on Linux (including Flatpak and Snap) and Windows, and brings over bookmarks, history, open tabs and, if you like, extensions (installed again from their stores). It only reads the other browser's files. Passwords and cookies stay behind, because each browser encrypts them with its own key.
+
 **Build** it yourself with Rust 1.85 or later, CMake and Ninja:
 
 ```sh
@@ -125,18 +127,18 @@ cd rust && cargo build --release
 cp -r ~/cef/. target/release/ && target/release/cottoncandy
 ```
 
-**Startup and memory**, measured with `rust/bench/bench.py` on 2026-11-25. Each tab loads a local test page with 120 styled cards, a 200-row table and a little script.
+**Startup and memory**, measured with `rust/bench/bench.py` on 2026-11-25. On average over the three rows CottonCandy uses 19% less memory than Chrome, shows the first page 18% sooner and finishes loading every tab 17% sooner. Each tab loads a local test page with 120 styled cards, a 200-row table and a little script.
 
 | Browser | Tabs | First page | All pages | Memory (PSS) |
 |---|---:|---:|---:|---:|
-| Google Chrome 158 | 1 | 0.34 s | 0.34 s | 484 MB |
-| CottonCandy | 1 | 0.33 s | 0.33 s | 414 MB |
-| Google Chrome 158 | 5 | 0.38 s | 0.47 s | 578 MB |
-| CottonCandy | 5 | 0.33 s | 0.39 s | 488 MB |
-| Google Chrome 158 | 15 | 0.47 s | 0.78 s | 808 MB |
-| CottonCandy | 15 | 0.46 s | 0.70 s | 675 MB |
+| CottonCandy | 1 | 0.30 s | 0.30 s | 390 MB |
+| Google Chrome 158 | 1 | 0.36 s | 0.36 s | 484 MB |
+| CottonCandy | 5 | 0.29 s | 0.38 s | 467 MB |
+| Google Chrome 158 | 5 | 0.41 s | 0.53 s | 578 MB |
+| CottonCandy | 15 | 0.50 s | 0.80 s | 662 MB |
+| Google Chrome 158 | 15 | 0.54 s | 0.84 s | 809 MB |
 
-Medians of 5 runs each, after one warm-up run. Each run starts the browser with a fresh profile and opens every tab from the command line; memory is measured five seconds after the last page loaded.
+Medians of 7 runs each, after one warm-up run. Each run starts the browser with a fresh profile and opens every tab from the command line; memory is measured five seconds after the last page loaded.
 
 The test machine had 4 CPUs (Xeon, 2.1 GHz) and 15 GB, ran Linux under Xvfb with software rendering, and ran both browsers without Chromium's sandbox. Memory is the proportional set size of every process the browser started, so shared memory is counted once. CottonCandy's own pages (the toolbar and tab strip) are included in its number. CottonCandy uses Chromium 156 through CEF; Chrome was 158. Each release measures it again on GitHub's runner and puts the numbers in the release notes.
 

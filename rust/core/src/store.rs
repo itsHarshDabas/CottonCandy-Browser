@@ -97,6 +97,26 @@ impl Store {
         Ok(())
     }
 
+    /// Adds history from another browser in one transaction. A page already known keeps the higher visit
+    /// count and the later visit. Returns how many pages were brought in.
+    pub fn import_visits(&self, visits: &[crate::import::Visit]) -> rusqlite::Result<usize> {
+        let tx = self.db.unchecked_transaction()?;
+        let mut added = 0;
+        {
+            let mut stmt = tx.prepare(
+                "INSERT INTO history (url, title, last_visit, visits) VALUES (?1, ?2, ?3, ?4)
+                 ON CONFLICT(url) DO UPDATE SET visits = MAX(visits, ?4), last_visit = MAX(last_visit, ?3),
+                 title = CASE WHEN title = '' THEN ?2 ELSE title END",
+            )?;
+            for v in visits.iter().filter(|v| rememberable(&v.url)) {
+                stmt.execute(params![v.url, clip(&v.title, 500), v.last_visit, v.visits])?;
+                added += 1;
+            }
+        }
+        tx.commit()?;
+        Ok(added)
+    }
+
     pub fn set_title(&self, url: &str, title: &str) -> rusqlite::Result<()> {
         self.db.execute(
             "UPDATE history SET title = ?2 WHERE url = ?1",

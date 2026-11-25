@@ -257,6 +257,11 @@
     $("site").addEventListener("click", () => popup("site", { ...rectOf($("site")), width: 340, height: 300, y: rectOf($("address")).y + 40 }));
     $("menu").addEventListener("click", () => popup("menu", anchor($("menu"), 280, 0), { items: mainMenu() }));
     const url = $("url");
+    // The popup (suggestions, menus, Shields) is made on first need; start it as soon as the pointer or the
+    // focus comes to the toolbar, so it is ready by the time it is asked for.
+    const warm = () => { if (warm.done) return; warm.done = true; cc.call("popup_warm").catch(() => {}); };
+    document.documentElement.addEventListener("pointerover", warm, { once: true });
+    url.addEventListener("focus", warm);
     url.addEventListener("focus", () => { editing = true; drawShown({}); url.style.color = ""; if (url.value) url.select(); });
     url.addEventListener("blur", () => { editing = false; setTimeout(hideSuggestions, 150); if (state) { url.value = state.nav.url || ""; drawShown(state.nav.parts || {}); } });
     url.addEventListener("input", () => { clearTimeout(suggestTimer); suggestTimer = setTimeout(suggest, 60); });
