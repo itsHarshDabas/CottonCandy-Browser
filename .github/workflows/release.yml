@@ -41,17 +41,40 @@ jobs:
       - name: Windows build deps
         if: runner.os == 'Windows'
         run: choco install ninja -y
+      # CEF with the MP4 (H.264/AAC) codecs, when .github/workflows/cef-codecs.yml has built it for
+      # this version and OS; otherwise the stock CEF, which plays WebM, AV1 and MP3 but not MP4.
+      - name: Which CEF
+        id: cef
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          plat=$([ "$RUNNER_OS" = Windows ] && echo windows64 || echo linux64)
+          asset=$(gh release view "cef-codecs-${CEF_VERSION#*+}" -R "$GITHUB_REPOSITORY" --json assets \
+            --jq ".assets[].name | select(endswith(\"${plat}_minimal.tar.bz2\"))" 2> /dev/null || true)
+          if [ -n "$asset" ]; then echo "flavor=codecs" >> "$GITHUB_OUTPUT"; else echo "flavor=stock" >> "$GITHUB_OUTPUT"; fi
+          echo "asset=$asset" >> "$GITHUB_OUTPUT"
+          echo "CEF: ${asset:-stock download}"
       - uses: actions/cache@v4
         with:
           path: ${{ matrix.cef_dir }}
-          key: cef-${{ runner.os }}-${{ env.CEF_VERSION }}
+          key: cef-${{ runner.os }}-${{ env.CEF_VERSION }}-${{ steps.cef.outputs.flavor }}
       - uses: Swatinem/rust-cache@v2
         with: { workspaces: rust }
       - name: Get CEF
+        env:
+          GH_TOKEN: ${{ github.token }}
+          ASSET: ${{ steps.cef.outputs.asset }}
         run: |
           if [ ! -f "$CEF_PATH/archive.json" ]; then
-            cargo install export-cef-dir --version "=$CEF_VERSION" --locked
-            export-cef-dir --force "$CEF_PATH"
+            if [ -n "$ASSET" ]; then
+              tag="cef-codecs-${CEF_VERSION#*+}"
+              gh release download "$tag" -R "$GITHUB_REPOSITORY" -p "$ASSET" -p "$ASSET.sha256" -D "$RUNNER_TEMP/cef"
+              (cd "$RUNNER_TEMP/cef" && sha256sum -c "$ASSET.sha256")
+              python3 ../tools/cef-codecs/unpack.py "$RUNNER_TEMP/cef/$ASSET" "$CEF_PATH" || python ../tools/cef-codecs/unpack.py "$RUNNER_TEMP/cef/$ASSET" "$CEF_PATH"
+            else
+              cargo install export-cef-dir --version "=$CEF_VERSION" --locked
+              export-cef-dir --force "$CEF_PATH"
+            fi
           fi
       - name: Version
         id: version
