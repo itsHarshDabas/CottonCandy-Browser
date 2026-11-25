@@ -30,3 +30,7 @@
 ||33across.com^$third-party
 ||indexww.com^$third-party
 ||3lift.com^$third-party
+! The boxes Google's ad tags leave behind.
+##.adsbygoogle
+##[id^="google_ads_iframe"]
+##[id^="div-gpt-ad"]
