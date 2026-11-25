@@ -65,7 +65,11 @@ def stage(n):
         run: |
           "$PYTHON" repo/tools/cef-codecs/stage.py "$WORK" "$DEADLINE" --checkout
 """
-    s += f"""      - name: Linux build dependencies
+    s += f"""      - name: Windows SDK
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: repo/tools/cef-codecs/win-sdk.ps1 -Work $env:WORK
+      - name: Linux build dependencies
         if: runner.os == 'Linux'
         run: sudo "$WORK/chromium/src/build/install-build-deps.sh" --no-prompt --no-chromeos-fonts || sudo "$WORK/chromium/src/build/install-build-deps.sh" --no-prompt
       - name: Build until the deadline

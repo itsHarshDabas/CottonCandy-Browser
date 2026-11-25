@@ -17,14 +17,6 @@ if [ "$RUNNER_OS" = Linux ]; then
   df -h / /mnt
 else
   powershell -NoProfile -Command "Get-PSDrive -PSProvider FileSystem | Format-Table Name, @{n='FreeGB';e={[int](\$_.Free/1GB)}}, @{n='UsedGB';e={[int](\$_.Used/1GB)}}"
-  # The same for Windows: SDKs and tool caches a Chromium build doesn't use. (Visual Studio stays.)
-  for d in /c/Android /c/hostedtoolcache/windows/Java_* /c/hostedtoolcache/windows/go /c/hostedtoolcache/windows/Ruby \
-    /c/hostedtoolcache/windows/PyPy /c/hostedtoolcache/windows/CodeQL /c/hostedtoolcache/windows/node /c/ghcup \
-    /c/Strawberry /c/Miniconda /c/selenium /c/tools/php /c/rtools* "/c/Program Files/MongoDB" "/c/Program Files/PostgreSQL" \
-    "/c/Program Files/Mozilla Firefox" "/c/Program Files (x86)/Android" /c/msys64 /c/vcpkg "/c/Program Files/Azure Cosmos DB Emulator" \
-    "/c/Program Files/R" /c/julia* "/c/Program Files/Haskell" /c/cabal /c/SeleniumWebDrivers; do
-    [ -e "$d" ] && { du -sh "$d" 2> /dev/null | tail -1; rm -rf "$d" 2> /dev/null || true; }
-  done
   git config --global core.longpaths true
   git config --global core.autocrlf false
   command -v zstd > /dev/null || choco install zstandard -y --no-progress
