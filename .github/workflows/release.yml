@@ -1,0 +1,166 @@
+name: release
+# Pushing a tag like v0.1.0 builds CottonCandy for Linux and Windows, measures its startup time and memory
+# against Google Chrome on the same runner, and publishes a GitHub release with both packages, SHA256SUMS and
+# the measured numbers. On a pull request that changes it, or run by hand, it does everything except publish.
+on:
+  push:
+    tags: ["v*"]
+  pull_request:
+    paths: [".github/workflows/release.yml", "rust/bench/**"]
+  workflow_dispatch:
+permissions:
+  contents: write
+env:
+  CARGO_TERM_COLOR: always
+  CEF_VERSION: "156.7.0+156.0.31"
+jobs:
+  build:
+    strategy:
+      fail-fast: true
+      matrix:
+        include:
+          - os: ubuntu-24.04
+            cef_dir: /home/runner/.local/share/cef
+            target: linux-x86_64
+          - os: windows-2025
+            cef_dir: C:\cef
+            target: windows-x86_64
+    runs-on: ${{ matrix.os }}
+    defaults:
+      run:
+        shell: bash
+        working-directory: rust
+    env:
+      CEF_PATH: ${{ matrix.cef_dir }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - name: Linux build deps
+        if: runner.os == 'Linux'
+        run: sudo apt-get update && sudo apt-get install -y cmake ninja-build libgtk-3-dev libnss3 libasound2t64 libxss1 libgbm1 xvfb
+      - name: Windows build deps
+        if: runner.os == 'Windows'
+        run: choco install ninja -y
+      - uses: actions/cache@v4
+        with:
+          path: ${{ matrix.cef_dir }}
+          key: cef-${{ runner.os }}-${{ env.CEF_VERSION }}
+      - uses: Swatinem/rust-cache@v2
+        with: { workspaces: rust }
+      - name: Get CEF
+        run: |
+          if [ ! -f "$CEF_PATH/archive.json" ]; then
+            cargo install export-cef-dir --version "=$CEF_VERSION" --locked
+            export-cef-dir --force "$CEF_PATH"
+          fi
+      - name: Version
+        id: version
+        run: |
+          version=$(cargo metadata --no-deps --format-version 1 | python3 -c "import json,sys; print(next(p['version'] for p in json.load(sys.stdin)['packages'] if p['name'] == 'cottoncandy'))")
+          if [ "$GITHUB_REF_TYPE" = tag ] && [ "$GITHUB_REF_NAME" != "v$version" ]; then
+            echo "The tag $GITHUB_REF_NAME doesn't match the version in rust/Cargo.toml ($version)." >&2
+            exit 1
+          fi
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+      - run: cargo test --release
+      - run: cargo build --release
+      - name: Package
+        env:
+          DIST: cottoncandy-${{ steps.version.outputs.version }}-${{ matrix.target }}
+        run: |
+          mkdir -p "../dist/$DIST"
+          out="../dist/$DIST"
+          cp -r "$CEF_PATH"/. "$out/"
+          # Only what runs: no headers, wrapper sources, CMake files or import libraries.
+          rm -rf "$out"/include "$out"/libcef_dll "$out"/cmake "$out"/CMakeLists.txt "$out"/archive.json "$out"/*.lib
+          cp ../LICENSE "$out/LICENSE.txt"
+          if [ "$RUNNER_OS" = Linux ]; then
+            cp target/release/cottoncandy "$out/"
+            cp ../org.graceos.CottonCandy.svg "$out/cottoncandy.svg"
+            # CEF ships libcef.so with its debug information (about 1.4 GB); stripped it is about 280 MB.
+            strip --strip-unneeded "$out/libcef.so"
+            xvfb-run -a "$out/cottoncandy" --version | tee /tmp/version.txt
+            tar -C ../dist -cf - "$DIST" | xz -T0 -6 > "../dist/$DIST.tar.xz"
+          else
+            cp target/release/cottoncandy.exe "$out/"
+            "$out/cottoncandy.exe" --version | tee /tmp/version.txt
+            (cd ../dist && 7z a -tzip -mx=7 "$DIST.zip" "$DIST" > /dev/null)
+          fi
+          grep -q '^CottonCandy ' /tmp/version.txt
+          ls -la ../dist
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.target }}
+          path: |
+            dist/*.tar.xz
+            dist/*.zip
+          if-no-files-found: error
+          compression-level: 0
+
+  # Startup time and memory, measured on the runner against the Google Chrome it comes with.
+  bench:
+    needs: build
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with: { name: linux-x86_64, path: dist }
+      - name: Run the benchmark
+        run: |
+          sudo apt-get update && sudo apt-get install -y xvfb libnss3 libasound2t64 libxss1 libgbm1 libgtk-3-0t64
+          mkdir -p cc && tar -C cc --strip-components=1 -xJf dist/*.tar.xz
+          Xvfb :99 -screen 0 1400x900x24 & sleep 2
+          export DISPLAY=:99
+          # Both browsers run without Chromium's sandbox here: the runner's AppArmor rules don't allow it for an
+          # unpacked folder, and they must be measured the same way.
+          chrome=$(google-chrome --version | grep -o '[0-9]*' | head -1)
+          for tabs in 1 5 15; do
+            python3 rust/bench/bench.py --name CottonCandy --tabs $tabs --runs 5 --json bench.jsonl -- env CC_NO_SANDBOX=1 "$PWD/cc/cottoncandy" {urls}
+            python3 rust/bench/bench.py --name "Google Chrome $chrome" --tabs $tabs --runs 5 --json bench.jsonl -- google-chrome --no-sandbox --user-data-dir={profile} --no-first-run --no-default-browser-check --disable-sync {urls}
+          done
+          {
+            python3 rust/bench/report.py bench.jsonl
+            echo
+            echo "Measured on a GitHub Actions ubuntu-24.04 runner ($(nproc) CPUs, $(free -g | awk '/Mem:/ {print $2}') GB), under Xvfb."
+          } > bench.md
+          cat bench.md >> "$GITHUB_STEP_SUMMARY"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: bench
+          path: |
+            bench.md
+            bench.jsonl
+
+  release:
+    needs: [build, bench]
+    if: github.ref_type == 'tag'
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with: { path: artifacts }
+      - name: Publish
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          mkdir out
+          find artifacts \( -name '*.tar.xz' -o -name '*.zip' \) -exec mv {} out/ \;
+          (cd out && sha256sum * > SHA256SUMS)
+          cat > notes.md <<EOF
+          CottonCandy ${GITHUB_REF_NAME}, the GraceOS web browser on Chromium (CEF ${CEF_VERSION%%+*}), for Linux and Windows.
+
+          ## Install
+          - **Windows:** unzip \`cottoncandy-*-windows-x86_64.zip\` anywhere and run \`cottoncandy.exe\`.
+          - **Linux:** \`tar -xJf cottoncandy-*-linux-x86_64.tar.xz\` and run \`./cottoncandy\`. Chromium's sandbox
+            needs its helper to be owned by root: \`sudo chown root:root chrome-sandbox && sudo chmod 4755 chrome-sandbox\`
+            in the unpacked folder (needed on Ubuntu 24.04 and other systems that restrict user namespaces).
+          - Grace needs [CherryCola](https://github.com/itsHarshDabas/CherryColaLLM) with a local model.
+
+          Check a download against \`SHA256SUMS\`: \`sha256sum -c SHA256SUMS --ignore-missing\`.
+
+          ## Startup and memory
+          $(cat artifacts/bench/bench.md)
+
+          See \`rust/bench/bench.py\` to measure it yourself.
+          EOF
+          gh release create "$GITHUB_REF_NAME" --title "CottonCandy $GITHUB_REF_NAME" --notes-file notes.md out/*
