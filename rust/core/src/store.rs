@@ -44,6 +44,16 @@ fn rememberable(url: &str) -> bool {
         && url.len() <= 8192
 }
 
+/// Tabs worth reopening: web pages, plus CottonCandy's own pages except the error and new tab pages.
+fn restorable(url: &str) -> bool {
+    rememberable(url)
+        || (url.starts_with("cottoncandy://")
+            && url.len() <= 512
+            && !url.starts_with("cottoncandy://error")
+            && !url.starts_with("cottoncandy://newtab")
+            && !url.starts_with("cottoncandy://ui"))
+}
+
 fn clip(text: &str, max: usize) -> String {
     text.chars().filter(|c| !c.is_control()).take(max).collect()
 }
@@ -186,6 +196,15 @@ impl Store {
             .is_some())
     }
 
+    /// Every bookmark as (url, title, folder), for exporting.
+    pub fn all_bookmarks(&self) -> rusqlite::Result<Vec<(String, String, String)>> {
+        let mut stmt = self
+            .db
+            .prepare("SELECT url, title, folder FROM bookmarks ORDER BY folder, added")?;
+        let rows = stmt.query_map([], |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?)))?;
+        rows.collect()
+    }
+
     pub fn bookmarks(&self, query: &str) -> rusqlite::Result<Vec<Entry>> {
         let like = format!(
             "%{}%",
@@ -265,7 +284,7 @@ impl Store {
         let tx = self.db.unchecked_transaction()?;
         tx.execute("DELETE FROM session", [])?;
         for (i, (url, pinned)) in tabs.iter().enumerate().take(500) {
-            if rememberable(url) {
+            if restorable(url) {
                 tx.execute(
                     "INSERT INTO session (position, url, pinned) VALUES (?1, ?2, ?3)",
                     params![i as i64, url, *pinned as i64],
@@ -347,13 +366,17 @@ mod tests {
             ("https://a.test/".into(), true),
             ("cottoncandy://newtab".into(), false),
             ("https://b.test/".into(), false),
+            ("cottoncandy://settings/#network".into(), false),
+            ("cottoncandy://error/?url=x".into(), false),
+            ("javascript:alert(1)".into(), false),
         ])
         .unwrap();
         assert_eq!(
             s.last_session().unwrap(),
             vec![
                 ("https://a.test/".into(), true),
-                ("https://b.test/".into(), false)
+                ("https://b.test/".into(), false),
+                ("cottoncandy://settings/#network".into(), false)
             ]
         );
     }

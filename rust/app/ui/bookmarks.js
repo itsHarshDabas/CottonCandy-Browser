@@ -14,7 +14,9 @@
   }
   const note = text => { $("note").textContent = text; };
   $("q").addEventListener("input", () => { clearTimeout(timer); timer = setTimeout(load, 120); });
-  $("import").addEventListener("click", () => cc.call("bookmarks_import", {}).then(r => { note(r.count ? `Imported ${r.count} bookmarks` : ""); load(); }).catch(e => note(e.message)));
+  $("import").addEventListener("click", () => cc.call("bookmarks_import", {}).catch(e => note(e.message)));
+  // The browser answers once a file has been picked in the dialog.
+  cc.on("import", r => { note(r.error || `Imported ${r.count} bookmark${r.count === 1 ? "" : "s"}`); load(); });
   $("export").addEventListener("click", () => cc.call("bookmarks_export", {}).then(r => note(r.path ? `Saved to ${r.path}` : "")).catch(e => note(e.message)));
   load();
 })();

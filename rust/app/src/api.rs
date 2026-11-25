@@ -50,6 +50,20 @@ pub fn allowed(host: &str, cmd: &str) -> bool {
             "bookmarks_export",
         ],
         "downloads" => &["downloads", "download_action"],
+        "settings" => &[
+            "settings_get",
+            "settings_set",
+            "settings_reset",
+            "ext_install",
+            "ext_toggle",
+            "ext_remove",
+            "bookmarks_import",
+            "bookmarks_export",
+            "pick_folder",
+            "clear_data",
+            "restart",
+            "about",
+        ],
         "error" => &["error_retry", "nav"],
         "about" => &["about"],
         _ => &[],
@@ -84,6 +98,10 @@ pub fn dispatch(cmd: &str, args: &Json, browser_id: i32, from_host: &str) -> Res
             Some(r) => *r,
             None => (ui.focused().map(|w| w.id).ok_or("no window")?, Role::Tab(0)),
         };
+        let settings_call = from_host == "settings" && cmd != "about";
+        if settings_call || matches!(cmd, "bookmarks_import" | "bookmarks_export") {
+            return crate::settings_api::call(ui, browser_id, cmd, args);
+        }
         call(ui, win, role, cmd, args, from_host)
     })
 }
@@ -215,7 +233,7 @@ fn call(ui: &mut Ui, win: u32, role: Role, cmd: &str, args: &Json, from_host: &s
                 return Ok(json!({}));
             };
             match arg_str(args, "action") {
-                "close" => w.window.close(),
+                "close" => close_window(&w.window),
                 "minimize" => w.window.minimize(),
                 "maximize" if w.window.is_maximized() != 0 => w.window.restore(),
                 "maximize" => w.window.maximize(),
@@ -239,7 +257,6 @@ fn call(ui: &mut Ui, win: u32, role: Role, cmd: &str, args: &Json, from_host: &s
                 .unwrap_or_default();
             Ok(json!({ "items": items }))
         }
-        "bookmarks_import" | "bookmarks_export" => Err("Coming in the Settings update".into()),
         "history" => {
             let private = ui.win(win).map(|w| w.private).unwrap_or(false);
             let limit = args
@@ -321,7 +338,8 @@ fn call(ui: &mut Ui, win: u32, role: Role, cmd: &str, args: &Json, from_host: &s
             Ok(json!({}))
         }
         "about" => Ok(about()),
-        "site_shields" | "proxy_set" | "grace_toggle" | "site_clear" | "site_reset" => {
+        "proxy_set" => crate::settings_api::proxy_set(ui, args),
+        "site_shields" | "grace_toggle" | "site_clear" | "site_reset" => {
             Err("Coming in the next update".into())
         }
         _ => Err(format!("unknown call {cmd}")),
@@ -370,7 +388,7 @@ fn suggest(text: &str) -> Res {
     Ok(json!({ "items": items, "autocomplete": true }))
 }
 
-fn popup_info(ui: &mut Ui, win: u32, kind: &str) -> Option<Json> {
+pub(crate) fn popup_info(ui: &mut Ui, win: u32, kind: &str) -> Option<Json> {
     match kind {
         "downloads" => Some(
             json!({ "items": ui.downloads.iter().map(browser::download_json).collect::<Vec<_>>() }),
@@ -704,29 +722,38 @@ pub fn command(ui: &mut Ui, win: u32, id: &str, arg: &Json) -> Res {
                 "open_downloads" => "cottoncandy://downloads/",
                 "open_bookmarks" => "cottoncandy://bookmarks/",
                 "open_settings" => "cottoncandy://settings/",
-                "open_extensions" => "cottoncandy://extensions/",
+                "open_extensions" => "cottoncandy://settings/#extensions",
                 "clear_data" => "cottoncandy://settings/#privacy",
                 _ => "cottoncandy://about/",
             };
-            // Reuse a tab that already shows the page.
+            // Reuse a tab that already shows the page (and jump to the section asked for).
+            let page = url.split('#').next().unwrap_or(url);
             let existing = ui.win(win).and_then(|w| {
                 w.tabs
                     .iter()
-                    .find(|t| t.url.starts_with(url.trim_end_matches("#privacy")))
+                    .find(|t| t.url.starts_with(page))
                     .map(|t| t.id)
             });
             match existing {
-                Some(t) => ui.activate(win, t),
+                Some(t) => {
+                    ui.activate(win, t);
+                    if url.contains('#') {
+                        if let Some(tab) = ui.tab(win, t) {
+                            browser::load(tab, url);
+                        }
+                    }
+                }
                 None => {
                     ui.new_tab(win, url, true, None);
                 }
             }
         }
         "toggle_bookmarks_bar" => {
-            let mut settings = shared::settings();
-            settings.appearance.show_bookmarks_bar = !settings.appearance.show_bookmarks_bar;
-            shared::set_settings(settings)?;
-            ui.relayout();
+            crate::settings_api::change(ui, |s| {
+                let mut s = s.clone();
+                s.appearance.show_bookmarks_bar = !s.appearance.show_bookmarks_bar;
+                Ok(s)
+            })?;
         }
         "window_new" | "window_private" => {
             let private = id == "window_private";
@@ -734,13 +761,13 @@ pub fn command(ui: &mut Ui, win: u32, id: &str, arg: &Json) -> Res {
         }
         "window_close" => {
             if let Some(w) = ui.win(win) {
-                w.window.close();
+                close_window(&w.window);
             }
         }
         "quit" => {
             ui.save_session();
             for w in &ui.windows {
-                w.window.close();
+                close_window(&w.window);
             }
         }
         "find" => {

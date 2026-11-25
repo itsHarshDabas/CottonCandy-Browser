@@ -37,8 +37,13 @@ wrap_app! {
             switch("disable-features-chrome-labs");
             value("disable-features", DISABLED_FEATURES);
             // Keeps memory down when many tabs are open, without giving up site isolation.
-            value("enable-features", "PartitionAllocMemoryReclaimer,HighEfficiencyModeAvailable");
             let settings = shared::settings();
+            let mut features = String::from("PartitionAllocMemoryReclaimer,HighEfficiencyModeAvailable");
+            if settings.appearance.dark_web_pages {
+                // Chromium's auto dark mode for sites without a dark theme of their own.
+                features += ",WebContentsForceDark";
+            }
+            value("enable-features", &features);
             if settings.privacy.webrtc_ip_policy != "default" {
                 value("force-webrtc-ip-handling-policy", &settings.privacy.webrtc_ip_policy);
             }

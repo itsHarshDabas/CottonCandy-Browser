@@ -3,6 +3,7 @@
 //! The `cottoncandy` app crate puts this on Chromium (CEF). Nothing here touches the network by itself:
 //! callers decide when to fetch filter lists, extensions or a model reply.
 
+pub mod bookmarks_html;
 pub mod extensions;
 pub mod grace;
 pub mod omnibox;

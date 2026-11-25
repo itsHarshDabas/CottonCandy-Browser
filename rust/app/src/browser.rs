@@ -87,6 +87,9 @@ pub struct Win {
     /// Every live browser in this window, by CEF id. The window may close only when this is empty.
     pub browsers: HashMap<i32, Browser>,
     pub closing: bool,
+    /// Browsers that have agreed to close (their DoClose ran) while the window closes.
+    pub close_ready: std::collections::HashSet<i32>,
+    pub close_attempts: u32,
     pub maximized: bool,
     pub fullscreen: bool,
 }
@@ -302,25 +305,41 @@ wrap_window_delegate! {
 
         fn can_close(&self, _window: Option<&mut Window>) -> ::std::os::raw::c_int {
             let id = self.id;
-            let ready = try_with(|ui| {
-                let Some(win) = ui.win(id) else { return true };
-                if win.browsers.is_empty() {
-                    return true;
-                }
-                if !win.closing {
-                    win.closing = true;
-                    let browsers: Vec<Browser> = win.browsers.values().cloned().collect();
-                    on_ui(move || {
-                        for b in browsers {
-                            if let Some(host) = b.host() {
-                                host.close_browser(0);
-                            }
-                        }
-                    });
-                }
-                false
+            // Each browser runs its beforeunload handlers and then agrees to close (DoClose, which records it in
+            // `close_ready`). The window closes once every one has, and takes its browsers with it.
+            let pending = try_with(|ui| {
+                ui.win(id).map(|w| {
+                    w.closing = true;
+                    w.browsers
+                        .iter()
+                        .filter(|(bid, _)| !w.close_ready.contains(bid))
+                        .map(|(_, b)| b.clone())
+                        .collect::<Vec<Browser>>()
+                })
             });
-            ready.unwrap_or(false) as i32
+            let Some(pending) = pending else { return 0 };
+            let pending = pending.unwrap_or_default();
+            for b in &pending {
+                if let Some(host) = b.host() {
+                    host.try_close_browser();
+                }
+            }
+            // Browsers often agree while we're asking (their DoClose runs inside try_close_browser), so look
+            // again; if some are still busy (beforeunload), try again shortly, for up to ten seconds.
+            let ready = try_with(|ui| {
+                ui.win(id).map(|w| {
+                    w.close_attempts += 1;
+                    let ready = w.browsers.keys().all(|b| w.close_ready.contains(b));
+                    if !ready && w.close_attempts < 50 {
+                        let window = w.window.clone();
+                        on_ui_later(200, move || window.close());
+                    }
+                    ready
+                })
+            })
+            .flatten()
+            .unwrap_or(true);
+            ready as i32
         }
 
         fn on_window_activation_changed(&self, _window: Option<&mut Window>, active: ::std::os::raw::c_int) {
@@ -551,6 +570,8 @@ pub fn open_window(private: bool, urls: Vec<String>) {
             active: None,
             browsers: HashMap::new(),
             closing: false,
+            close_ready: Default::default(),
+            close_attempts: 0,
             maximized: false,
             fullscreen: false,
         });
@@ -691,7 +712,7 @@ impl Ui {
             .remove_child_view(Some(&mut View::from(&t.view)));
         if w.tabs.is_empty() {
             if !w.closing {
-                w.window.close();
+                close_window(&w.window);
             }
             return;
         }
@@ -1058,7 +1079,13 @@ pub fn startup_urls(args: &[String]) -> Vec<String> {
     if !from_args.is_empty() {
         return from_args;
     }
-    match settings.startup.open.as_str() {
+    // After the Restart button, pick up where the user was whatever the startup setting says.
+    let restarted = args.iter().any(|a| a == "--cc-restarted");
+    match if restarted {
+        "restore"
+    } else {
+        settings.startup.open.as_str()
+    } {
         "restore" => shared::with_store(|s| s.last_session().unwrap_or_default())
             .unwrap_or_default()
             .into_iter()
@@ -1113,10 +1140,16 @@ pub fn apply_network_settings(context: Option<&RequestContext>) -> Option<String
     if let Err(e) = set_pref(&context, "proxy", &proxy) {
         error.get_or_insert(e);
     }
-    for (name, value) in settings.network.dns.chromium_prefs() {
-        if let Err(e) = set_pref(&context, name, &value) {
-            error.get_or_insert(e);
+    // Secure DNS is a browser-wide ("local state") setting, so it goes to the global preferences.
+    if let Some(global) = preference_manager_get_global() {
+        for (name, value) in settings.network.dns.chromium_prefs() {
+            if let Err(e) = set_pref(&global, name, &value) {
+                error.get_or_insert(e);
+            }
         }
+    }
+    if let (Some(e), true) = (&error, std::env::var_os("CC_DEBUG").is_some()) {
+        eprintln!("[network] {e} (proxy {proxy})");
     }
     let _ = set_pref(
         &context,

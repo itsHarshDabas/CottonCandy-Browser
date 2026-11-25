@@ -11,6 +11,7 @@ mod cefx;
 mod client;
 mod icon;
 mod scheme;
+mod settings_api;
 mod shared;
 
 use cef::*;
@@ -68,4 +69,11 @@ fn main() {
         shared::with_store(|s| s.clear_history(0));
     }
     shutdown();
+    if settings_api::RESTART_REQUESTED.load(std::sync::atomic::Ordering::SeqCst) {
+        if let Ok(exe) = std::env::current_exe() {
+            let _ = std::process::Command::new(exe)
+                .arg("--cc-restarted")
+                .spawn();
+        }
+    }
 }

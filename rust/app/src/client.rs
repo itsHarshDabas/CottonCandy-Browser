@@ -1,7 +1,7 @@
 //! What each browser does when its page loads, navigates, opens popups, downloads or takes keys.
 //! Handlers run inside CEF callbacks, so they copy what they need and change state with `later`.
 
-use crate::browser::{self, later, DlSnap, TabShared};
+use crate::browser::{self, later, try_with, DlSnap, TabShared};
 use crate::cefx::*;
 use crate::{api, shared};
 use cef::*;
@@ -154,10 +154,26 @@ wrap_life_span_handler! {
             });
         }
 
-        fn do_close(&self, _browser: Option<&mut Browser>) -> ::std::os::raw::c_int {
-            // Returning 0 would close the whole window. A Views browser finishes closing once its
-            // view leaves the window, so take the tab out now (unless the whole window is going).
+        fn do_close(&self, browser: Option<&mut Browser>) -> ::std::os::raw::c_int {
+            // While the whole window is closing, let CEF go ahead (0). Otherwise return 1, or CEF would close
+            // the window: a Views browser finishes closing once its view leaves the window, so take the tab
+            // out ourselves.
             let ctx = self.ctx.clone();
+            let id = browser.map(|b| b.identifier()).unwrap_or(0);
+            let window_closing = try_with(|ui| {
+                ui.win(ctx.win)
+                    .map(|w| {
+                        // A browser that got here is on its way out either way (a closed tab too), so the
+                        // window shouldn't wait for it.
+                        w.close_ready.insert(id);
+                        w.closing
+                    })
+                    .unwrap_or(true)
+            })
+            .unwrap_or(false);
+            if window_closing {
+                return 0;
+            }
             if let Role::Tab(tab) = ctx.role {
                 later(move |ui| {
                     if ui.win(ctx.win).is_some_and(|w| !w.closing) {
@@ -182,7 +198,7 @@ wrap_life_span_handler! {
                 }
                 if closing && empty {
                     if let Some(w) = ui.win(ctx.win) {
-                        w.window.close();
+                        close_window(&w.window);
                     }
                 }
             });
