@@ -44,6 +44,8 @@ def automate_args(work, checkout):
         "--minimal-distrib-only",
         "--no-distrib-docs",
         "--no-chromium-history",
+        # Official builds are optimised with Chromium's profiles (PGO), as the stock CEF builds are.
+        "--with-pgo-profiles",
     ]
     if checkout:
         # Fetch everything, generate the build files, build nothing yet.
