@@ -111,6 +111,35 @@ sudo make install            # PREFIX=/usr by default; DESTDIR works for packagi
 cottoncandy --set-default    # optional
 ```
 
+## Windows and Linux (Rust)
+`rust/` holds CottonCandy for Windows and Linux, written in Rust on Chromium through CEF. It has the same Grace, Shields and settings as this browser; see [docs/SECURITY.md](docs/SECURITY.md) for how it is secured.
+
+**Download** it from [Releases](https://github.com/itsHarshDabas/CottonCandy-Browser/releases): a zip for Windows and a `.tar.xz` for Linux, with `SHA256SUMS`. Pushing a tag like `v0.1.0` builds both, measures them and publishes the release (`.github/workflows/release.yml`).
+
+**Build** it yourself with Rust 1.85 or later, CMake and Ninja:
+
+```sh
+cargo install export-cef-dir --version "=156.7.0+156.0.31" --locked
+export-cef-dir --force ~/cef && export CEF_PATH=~/cef
+cd rust && cargo build --release
+cp -r ~/cef/. target/release/ && target/release/cottoncandy
+```
+
+**Startup and memory**, measured with `rust/bench/bench.py` on 2026-11-25. Each tab loads a local test page with 120 styled cards, a 200-row table and a little script.
+
+| Browser | Tabs | First page | All pages | Memory (PSS) |
+|---|---:|---:|---:|---:|
+| Google Chrome 158 | 1 | 0.34 s | 0.34 s | 484 MB |
+| CottonCandy | 1 | 0.33 s | 0.33 s | 414 MB |
+| Google Chrome 158 | 5 | 0.38 s | 0.47 s | 578 MB |
+| CottonCandy | 5 | 0.33 s | 0.39 s | 488 MB |
+| Google Chrome 158 | 15 | 0.47 s | 0.78 s | 808 MB |
+| CottonCandy | 15 | 0.46 s | 0.70 s | 675 MB |
+
+Medians of 5 runs each, after one warm-up run. Each run starts the browser with a fresh profile and opens every tab from the command line; memory is measured five seconds after the last page loaded.
+
+The test machine had 4 CPUs (Xeon, 2.1 GHz) and 15 GB, ran Linux under Xvfb with software rendering, and ran both browsers without Chromium's sandbox. Memory is the proportional set size of every process the browser started, so shared memory is counted once. CottonCandy's own pages (the toolbar and tab strip) are included in its number. CottonCandy uses Chromium 156 through CEF; Chrome was 158. Each release measures it again on GitHub's runner and puts the numbers in the release notes.
+
 ## Test
 ```sh
 make check   # unit tests (no Qt needed) + desktop-file-validate
@@ -157,3 +186,7 @@ On 2026-11-23, Enhance search was run the same way (PySide6 6.12.0 from PyPI, Xv
 Not checked yet: Wayland/Hyprland (including how the frameless window and its traffic lights behave there), video codecs, camera and microphone (the test machine had none), audio indicators, Arch's own packages, and Grace with a real model (the quality of its summaries and rewritten searches, and how long a small model takes on a long page).
 
 ![chrome://sandbox and the find bar](docs/screenshots/sandbox-and-find.png)
+
+## License
+
+CottonCandy is free software under the GNU General Public License, version 3 or (at your option) any later version. See [LICENSE](LICENSE).
