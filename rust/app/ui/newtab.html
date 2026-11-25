@@ -1,0 +1,54 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="cc-token" content="{{TOKEN}}">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self'">
+<title>New tab</title>
+<link rel="stylesheet" href="/ui/base.css">
+<link rel="stylesheet" href="/theme.css">
+<style>
+  html, body { height: 100%; overflow: hidden; }
+  body { background: transparent; }
+  body { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 28px; position: relative; }
+  #bg { position: fixed; inset: 0; z-index: -1; background: var(--bg); }
+  #bg.aurora { background: radial-gradient(60% 50% at 20% 20%, color-mix(in srgb, var(--accent) 45%, transparent), transparent 70%),
+    radial-gradient(50% 45% at 80% 30%, rgba(236,72,153,.32), transparent 70%), radial-gradient(60% 60% at 50% 100%, rgba(45,212,191,.22), transparent 70%), var(--bg); }
+  #bg.aurora::after { content: ""; position: absolute; inset: -20%; background: inherit; filter: blur(40px); opacity: .5; animation: drift 24s ease-in-out infinite alternate; }
+  @keyframes drift { to { transform: translate3d(4%, -3%, 0) scale(1.08); } }
+  :root[data-motion="off"] #bg.aurora::after { animation: none; }
+  #bg.gradient { background: linear-gradient(135deg, color-mix(in srgb, var(--accent) 55%, #000) 0%, var(--bg) 55%, #3b0764 120%); }
+  #bg.mesh { background: radial-gradient(at 0% 0%, color-mix(in srgb, var(--accent) 40%, transparent) 0, transparent 50%), radial-gradient(at 100% 0%, rgba(251,191,36,.25) 0, transparent 50%),
+    radial-gradient(at 100% 100%, rgba(236,72,153,.3) 0, transparent 50%), radial-gradient(at 0% 100%, rgba(34,197,94,.22) 0, transparent 50%), var(--bg); }
+  #bg.image { background: var(--bg) url("/wallpaper") center / cover no-repeat; }
+  #clock { font-size: 64px; font-weight: 300; letter-spacing: -.02em; font-variant-numeric: tabular-nums; text-shadow: 0 2px 20px rgba(0,0,0,.25); }
+  #date { color: var(--text-2); text-align: center; margin-top: -6px; }
+  form { width: min(620px, 86vw); position: relative; }
+  #q { width: 100%; height: 52px; border-radius: 26px; border: 1px solid var(--hair); background: var(--glass); backdrop-filter: blur(var(--blur));
+    padding: 0 22px 0 50px; font-size: 16px; outline: none; box-shadow: 0 8px 30px rgba(0,0,0,.18); }
+  #q:focus { border-color: var(--accent); box-shadow: 0 0 0 4px var(--accent-soft), 0 8px 30px rgba(0,0,0,.18); }
+  form svg { position: absolute; left: 18px; top: 16px; width: 20px; height: 20px; color: var(--text-2); z-index: 1; pointer-events: none; }
+  #tiles { display: grid; grid-template-columns: repeat(auto-fill, 92px); gap: 10px; justify-content: center; width: min(720px, 90vw); }
+  .tile { height: 92px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 8px; border-radius: calc(var(--radius) + 4px);
+    color: var(--text); background: var(--glass); backdrop-filter: blur(var(--blur)); border: 1px solid var(--hair); transition: transform var(--speed), background var(--speed); }
+  .tile:hover { background: var(--hover); transform: translateY(-2px); }
+  .tile .ic { width: 36px; height: 36px; border-radius: 10px; display: grid; place-items: center; background: var(--card); font-weight: 650; overflow: hidden; }
+  .tile .ic img { width: 22px; height: 22px; }
+  .tile .nm { font-size: 11.5px; max-width: 80px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; color: var(--text-2); }
+  #private { max-width: 560px; text-align: center; color: var(--text-2); line-height: 1.6; }
+  #private h2 { color: var(--text); font-size: 20px; margin: 0 0 6px; }
+  #stats { position: fixed; bottom: 16px; left: 0; right: 0; text-align: center; color: var(--text-3); font-size: 12px; }
+</style>
+</head>
+<body>
+<div id="bg"></div>
+<div id="clockbox"><div id="clock"></div><div id="date"></div></div>
+<div id="private" class="hidden"><h2>You're in a private window</h2>Pages you open here stay out of your history, and their cookies and site data are
+  deleted when you close the window. Downloads and bookmarks you make are kept. Your network provider and the sites you visit can still see you.</div>
+<form id="f" role="search"><input id="q" placeholder="Search or enter address" autocomplete="off" spellcheck="false" aria-label="Search or enter address"></form>
+<div id="tiles"></div>
+<div id="stats"></div>
+<script src="/ui/cc.js"></script>
+<script src="/ui/newtab.js"></script>
+</body>
+</html>

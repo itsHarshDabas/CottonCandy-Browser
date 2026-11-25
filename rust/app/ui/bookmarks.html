@@ -1,0 +1,21 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="cc-token" content="{{TOKEN}}">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self'">
+<title>Bookmarks</title>
+<link rel="stylesheet" href="/ui/base.css">
+<link rel="stylesheet" href="/ui/page.css">
+<link rel="stylesheet" href="/theme.css">
+</head>
+<body>
+<main class="page">
+  <div class="page-head"><h1>Bookmarks</h1><input id="q" class="field" type="search" placeholder="Search bookmarks" aria-label="Search bookmarks"></div>
+  <div class="toolbar"><button id="import" class="btn">Import bookmarks (HTML)…</button><button id="export" class="btn">Export…</button><span id="note" class="muted small"></span></div>
+  <div id="list" class="list card"></div>
+</main>
+<script src="/ui/cc.js"></script>
+<script src="/ui/bookmarks.js"></script>
+</body>
+</html>

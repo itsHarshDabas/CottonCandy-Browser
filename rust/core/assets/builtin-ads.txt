@@ -1,0 +1,32 @@
+[Adblock Plus 2.0]
+! Title: CottonCandy built-in ad servers
+! The biggest ad networks, so blocking works before the full lists download.
+||doubleclick.net^$third-party
+||googlesyndication.com^$third-party
+||googleadservices.com^$third-party
+||adservice.google.com^$third-party
+||pagead2.googlesyndication.com^
+||amazon-adsystem.com^$third-party
+||adnxs.com^$third-party
+||adsrvr.org^$third-party
+||criteo.com^$third-party
+||criteo.net^$third-party
+||taboola.com^$third-party
+||outbrain.com^$third-party
+||pubmatic.com^$third-party
+||rubiconproject.com^$third-party
+||openx.net^$third-party
+||casalemedia.com^$third-party
+||moatads.com^$third-party
+||adform.net^$third-party
+||smartadserver.com^$third-party
+||yieldmo.com^$third-party
+||sharethrough.com^$third-party
+||teads.tv^$third-party
+||media.net^$third-party
+||popads.net^$third-party
+||propellerads.com^$third-party
+||adcolony.com^$third-party
+||33across.com^$third-party
+||indexww.com^$third-party
+||3lift.com^$third-party

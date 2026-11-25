@@ -1,0 +1,22 @@
+/* Layout shared by CottonCandy's full pages (history, bookmarks, downloads, settings, extensions). */
+body { min-height: 100vh; }
+.page { max-width: 980px; margin: 0 auto; padding: 28px 28px 60px; }
+.page-head { display: flex; align-items: center; gap: 14px; margin-bottom: 20px; }
+.page-head h1 { font-size: 22px; font-weight: 650; margin: 0; flex: 1; letter-spacing: -.01em; }
+.page-head .field { width: 320px; }
+.card { background: var(--card); border: 1px solid var(--hair); border-radius: calc(var(--radius) + 4px); padding: 6px; }
+.list .row { display: flex; align-items: center; gap: 12px; min-height: calc(var(--row) + 10px); padding: 4px 10px; border-radius: var(--radius); }
+.list .row:hover { background: var(--hover); }
+.list .row .fav { width: 16px; height: 16px; flex: none; border-radius: 3px; }
+.list .row .main { flex: 1; min-width: 0; }
+.list .row .title { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.list .row .sub { color: var(--text-3); font-size: .9em; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.list .row .time { color: var(--text-3); font-variant-numeric: tabular-nums; flex: none; width: 70px; }
+.list .row .act { opacity: 0; } .list .row:hover .act { opacity: 1; }
+.day { margin: 22px 10px 8px; font-weight: 600; color: var(--text-2); }
+.empty { padding: 50px 20px; text-align: center; color: var(--text-2); }
+.empty svg { width: 34px; height: 34px; opacity: .5; display: block; margin: 0 auto 10px; }
+.bar { height: 5px; border-radius: 3px; background: var(--selected); overflow: hidden; margin-top: 6px; }
+.bar > i { display: block; height: 100%; background: var(--accent); transition: width .3s; }
+.tag { font-size: 11px; padding: 2px 7px; border-radius: 8px; background: var(--hover); color: var(--text-2); }
+.toolbar { display: flex; gap: 8px; align-items: center; margin-bottom: 14px; }
