@@ -688,9 +688,10 @@ impl Settings {
             ads: up && site.and_then(|s| s.ads).unwrap_or(self.shields.block_ads),
             trackers: up && self.shields.block_trackers,
             cosmetic: up && self.shields.hide_ad_boxes,
-            scripts_blocked: !site
-                .and_then(|s| s.scripts)
-                .unwrap_or(!self.shields.block_scripts),
+            scripts_blocked: up
+                && !site
+                    .and_then(|s| s.scripts)
+                    .unwrap_or(!self.shields.block_scripts),
             shields_up: up,
         }
     }
@@ -842,6 +843,8 @@ mod tests {
         let e = s.shields_for("a.test");
         assert!(!e.ads && !e.trackers && !e.shields_up);
         s.shields.block_scripts = true;
+        // Shields down means everything loads, scripts too.
+        assert!(!s.shields_for("a.test").scripts_blocked);
         assert!(s.shields_for("b.test").scripts_blocked);
         s.sites.insert(
             "b.test".into(),

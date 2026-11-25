@@ -217,6 +217,39 @@ impl Shields {
     }
 }
 
+/// The https:// address for a plain http page, or None to leave it alone. Hosts on this computer or the local
+/// network (IP addresses, names without a dot, .local, .lan, .internal, .home.arpa) rarely have certificates.
+pub fn https_upgrade(raw: &str) -> Option<String> {
+    let mut parsed = url::Url::parse(raw).ok()?;
+    if parsed.scheme() != "http" {
+        return None;
+    }
+    let host = match parsed.host()? {
+        url::Host::Domain(d) => d.trim_end_matches('.').to_ascii_lowercase(),
+        url::Host::Ipv4(_) | url::Host::Ipv6(_) => return None,
+    };
+    let local_suffix = [
+        ".local",
+        ".lan",
+        ".internal",
+        ".home.arpa",
+        ".localhost",
+        ".test",
+        ".onion",
+    ]
+    .iter()
+    .any(|s| host.ends_with(s));
+    if !host.contains('.') || local_suffix || crate::omnibox::is_local_host(&host) {
+        return None;
+    }
+    // A port that isn't 80 is usually a dev server that only speaks http.
+    if parsed.port().is_some() {
+        return None;
+    }
+    parsed.set_scheme("https").ok()?;
+    Some(parsed.to_string())
+}
+
 /// Query parameters that only track people, removed from links before they load.
 const TRACKING_PARAMS: &[&str] = &[
     "fbclid",
@@ -404,5 +437,28 @@ mod tests {
         );
         assert_eq!(strip_tracking_params("https://a.test/p?id=7"), None);
         assert_eq!(strip_tracking_params("ftp://a.test/?utm_x=1"), None);
+    }
+
+    #[test]
+    fn upgrades_only_public_http() {
+        assert_eq!(
+            https_upgrade("http://example.org/a?b=1").as_deref(),
+            Some("https://example.org/a?b=1")
+        );
+        for url in [
+            "https://example.org/",
+            "http://localhost/",
+            "http://127.0.0.1:8765/",
+            "http://192.168.1.1/",
+            "http://[::1]/",
+            "http://router/",
+            "http://printer.local/",
+            "http://nas.lan/",
+            "http://example.org:8080/",
+            "http://abc.onion/",
+            "ftp://example.org/",
+        ] {
+            assert_eq!(https_upgrade(url), None, "{url}");
+        }
     }
 }

@@ -19,6 +19,8 @@ pub enum Role {
     Chrome,
     VTabs,
     Popup,
+    /// Grace's side panel.
+    Side,
     Tab(u32),
 }
 
@@ -130,6 +132,7 @@ wrap_life_span_handler! {
                 match ctx.role {
                     Role::Chrome => w.chrome_browser = Some(browser),
                     Role::VTabs => w.vtabs_browser = Some(browser),
+                    Role::Side => w.grace.browser = Some(browser),
                     Role::Popup => {
                         if let Some(p) = w.popup.as_mut() {
                             p.browser = Some(browser);
@@ -186,6 +189,7 @@ wrap_life_span_handler! {
 
         fn on_before_close(&self, browser: Option<&mut Browser>) {
             let Some(id) = browser.map(|b| b.identifier()) else { return };
+            crate::grace::forget(id);
             let ctx = self.ctx.clone();
             later(move |ui| {
                 ui.roles.remove(&id);
@@ -398,6 +402,13 @@ wrap_load_handler! {
             });
         }
 
+        fn on_load_start(&self, _browser: Option<&mut Browser>, frame: Option<&mut Frame>, _transition_type: TransitionType) {
+            let Some(frame) = frame else { return };
+            if self.ctx.tab.is_some() {
+                crate::shields::inject_cosmetic(frame, &us(&frame.url()));
+            }
+        }
+
         fn on_load_end(&self, _browser: Option<&mut Browser>, frame: Option<&mut Frame>, http_status_code: ::std::os::raw::c_int) {
             let Some(frame) = frame.filter(|f| f.is_main() != 0) else { return };
             if self.ctx.tab_id().is_none() || self.ctx.private() || !(200..400).contains(&http_status_code) {
@@ -430,7 +441,9 @@ wrap_load_handler! {
                 return;
             }
             let url = os(failed_url);
-            let page = error_page(&url, &os(error_text), "");
+            // We moved this page to https and that failed: go back to the http page the link pointed to.
+            let target = crate::shields::https_fallback(&url).unwrap_or_else(|| error_page(&url, &os(error_text), ""));
+            let page = target;
             if let Some(tab) = &self.ctx.tab {
                 if let Ok(mut typed) = tab.typed.lock() {
                     *typed = page.clone();
@@ -461,7 +474,7 @@ wrap_request_handler! {
     impl RequestHandler {
         fn on_before_browse(
             &self,
-            _browser: Option<&mut Browser>,
+            browser: Option<&mut Browser>,
             frame: Option<&mut Frame>,
             request: Option<&mut Request>,
             user_gesture: ::std::os::raw::c_int,
@@ -470,8 +483,9 @@ wrap_request_handler! {
             let (Some(frame), Some(request)) = (frame, request) else { return 1 };
             let url = us(&request.url());
             let Some(tab) = &self.ctx.tab else {
-                // The toolbar, tab list and popup only ever show their own page.
-                return (!url.starts_with("cottoncandy://ui/")) as i32;
+                // The toolbar, tab list, popup and Grace panel only ever show their own page.
+                let own = if self.ctx.role == Role::Side { crate::grace::GRACE_URL } else { "cottoncandy://ui/" };
+                return (!url.starts_with(own)) as i32;
             };
             let is_main = frame.is_main() != 0;
             let from = us(&frame.url());
@@ -488,13 +502,35 @@ wrap_request_handler! {
                     })
                     .unwrap_or(false);
             match omnibox::navigation_decision(&url, &from, is_main, typed, user_gesture != 0) {
-                Navigation::Allow => 0,
+                Navigation::Allow => {
+                    if is_main {
+                        if let Some(b) = browser {
+                            crate::shields::before_navigation(b, &url);
+                        }
+                    }
+                    0
+                }
                 Navigation::Handoff => {
                     browser::open_external(&url);
                     1
                 }
                 Navigation::Block => 1,
             }
+        }
+
+        fn resource_request_handler(
+            &self,
+            _browser: Option<&mut Browser>,
+            _frame: Option<&mut Frame>,
+            _request: Option<&mut Request>,
+            _is_navigation: ::std::os::raw::c_int,
+            _is_download: ::std::os::raw::c_int,
+            _request_initiator: Option<&CefString>,
+            _disable_default_handling: Option<&mut ::std::os::raw::c_int>,
+        ) -> Option<ResourceRequestHandler> {
+            // Only web pages in tabs go past Shields; the toolbar and popups load nothing from the web.
+            let tab = self.ctx.tab.clone()?;
+            Some(crate::shields::TabRequests::new(self.ctx.win, tab))
         }
 
         fn on_open_urlfrom_tab(

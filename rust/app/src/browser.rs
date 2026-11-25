@@ -16,7 +16,7 @@ use cottoncandy_core::{omnibox, settings::Settings};
 use serde_json::{json, Value as Json};
 use std::cell::RefCell;
 use std::collections::HashMap;
-use std::sync::atomic::{AtomicBool, AtomicI32, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicI32, AtomicU32, Ordering};
 use std::sync::{Arc, Mutex};
 
 pub const NEWTAB_URL: &str = "cottoncandy://newtab/";
@@ -39,6 +39,41 @@ pub struct TabShared {
     /// The URL the user just typed or picked, which may go where a page can't (another scheme, our pages).
     pub typed: Mutex<String>,
     pub private: bool,
+    /// What Shields blocked on the page now showing (counted on the network thread).
+    pub ads_blocked: AtomicU32,
+    pub trackers_blocked: AtomicU32,
+    /// A toolbar refresh for the counters is already on its way.
+    pub counts_dirty: AtomicBool,
+    /// Hashes of the addresses blocked on this page, so a request made twice (by the preloader, then the
+    /// parser) counts once.
+    pub blocked_seen: Mutex<std::collections::HashSet<u64>>,
+}
+
+impl TabShared {
+    pub fn new(typed: &str, private: bool) -> TabShared {
+        TabShared {
+            typed: Mutex::new(typed.to_string()),
+            private,
+            ads_blocked: AtomicU32::new(0),
+            trackers_blocked: AtomicU32::new(0),
+            counts_dirty: AtomicBool::new(false),
+            blocked_seen: Mutex::new(std::collections::HashSet::new()),
+        }
+    }
+    /// A new page started: its counters start at zero.
+    pub fn reset_blocked(&self) {
+        self.ads_blocked.store(0, Ordering::Relaxed);
+        self.trackers_blocked.store(0, Ordering::Relaxed);
+        if let Ok(mut seen) = self.blocked_seen.lock() {
+            seen.clear();
+        }
+    }
+    pub fn blocked(&self) -> (u32, u32) {
+        (
+            self.ads_blocked.load(Ordering::Relaxed),
+            self.trackers_blocked.load(Ordering::Relaxed),
+        )
+    }
 }
 
 pub struct Tab {
@@ -70,6 +105,20 @@ pub struct Popup {
     pub pending: Option<Json>,
 }
 
+/// Grace's side panel. Its browser is made the first time it opens, so windows that never use Grace don't
+/// pay for another renderer.
+#[derive(Default)]
+pub struct GracePanel {
+    pub view: Option<BrowserView>,
+    pub browser: Option<Browser>,
+    pub open: bool,
+    pub ready: bool,
+    /// Questions from the address bar that arrived before the panel's page was ready.
+    pub pending: Vec<String>,
+    /// The page info last sent to the panel, so it hears only about changes.
+    pub last_page: Option<Json>,
+}
+
 pub struct Win {
     pub id: u32,
     pub private: bool,
@@ -81,6 +130,9 @@ pub struct Win {
     pub vtabs: BrowserView,
     pub vtabs_browser: Option<Browser>,
     pub tabs_host: Panel,
+    /// The row under the toolbar: vertical tabs, the page, and Grace's side panel.
+    pub body: Panel,
+    pub grace: GracePanel,
     pub popup: Option<Popup>,
     pub tabs: Vec<Tab>,
     pub active: Option<u32>,
@@ -406,7 +458,7 @@ fn frameless() -> bool {
     std::env::var_os("CC_SYSTEM_TITLEBAR").is_none()
 }
 
-fn create_view(
+pub fn create_view(
     win: u32,
     role: Role,
     url: &str,
@@ -565,6 +617,8 @@ pub fn open_window(private: bool, urls: Vec<String>) {
             vtabs,
             vtabs_browser: None,
             tabs_host,
+            body,
+            grace: GracePanel::default(),
             popup,
             tabs: Vec::new(),
             active: None,
@@ -605,10 +659,7 @@ impl Ui {
     ) -> Option<u32> {
         let id = self.next();
         let w = self.win(win)?;
-        let shared = Arc::new(TabShared {
-            typed: Mutex::new(url.to_string()),
-            private: w.private,
-        });
+        let shared = Arc::new(TabShared::new(url, w.private));
         let mut delegate = TabView::new();
         let view = create_view(
             win,
@@ -765,6 +816,7 @@ impl Ui {
         for b in [&w.chrome_browser, &w.vtabs_browser].into_iter().flatten() {
             run_js(b, &js);
         }
+        crate::grace::update_panel(w);
         let title = w
             .active
             .and_then(|id| w.tabs.iter().find(|t| t.id == id))
@@ -799,6 +851,9 @@ impl Ui {
         w.chrome.set_visible((!on) as i32);
         w.vtabs
             .set_visible((settings.appearance.tab_layout == "vertical" && !on) as i32);
+        if let Some(v) = &w.grace.view {
+            v.set_visible((w.grace.open && !on) as i32);
+        }
         w.window.layout();
     }
 }
@@ -892,7 +947,7 @@ fn window_state(w: &Win, settings: &Settings, downloads: Json) -> Json {
         "shields": {
             "applies": url.starts_with("http"),
             "on": shields.shields_up,
-            "blocked": 0,
+            "blocked": active.map(|t| { let (a, b) = t.shared.blocked(); a + b }).unwrap_or(0),
         },
         "proxy": {
             "on": proxy.enabled,
@@ -909,7 +964,7 @@ fn window_state(w: &Win, settings: &Settings, downloads: Json) -> Json {
             "maximized": w.maximized,
             "extensions": settings.extensions.enabled,
             "grace": settings.grace.enabled,
-            "grace_open": false,
+            "grace_open": w.grace.open,
         },
     })
 }
@@ -1123,7 +1178,20 @@ wrap_request_context_handler! {
             // Private windows go through the same proxy, DNS and privacy settings as the rest.
             if let Some(c) = request_context {
                 apply_network_settings(Some(c));
+                crate::shields::apply_scripts(c, &shared::settings());
             }
+        }
+    }
+}
+
+/// Puts the per-site script switches into every context, global and private.
+pub fn apply_site_settings(ui: &Ui, settings: &Settings) {
+    if let Some(global) = request_context_get_global_context() {
+        crate::shields::apply_scripts(&global, settings);
+    }
+    for w in &ui.windows {
+        if let Some(c) = &w.context {
+            crate::shields::apply_scripts(c, settings);
         }
     }
 }

@@ -33,6 +33,9 @@ const UI_CALLS: &[&str] = &[
     "site_shields",
     "proxy_set",
     "grace_toggle",
+    "grace_ask",
+    "grace_enhance",
+    "grace_stop",
     "site_clear",
     "site_reset",
     "find",
@@ -65,6 +68,14 @@ pub fn allowed(host: &str, cmd: &str) -> bool {
             "about",
         ],
         "error" => &["error_retry", "nav"],
+        "grace" => &[
+            "grace_ready",
+            "grace_close",
+            "grace_page",
+            "grace_chat",
+            "grace_stop",
+            "navigate",
+        ],
         "about" => &["about"],
         _ => &[],
     };
@@ -96,11 +107,16 @@ pub fn dispatch(cmd: &str, args: &Json, browser_id: i32, from_host: &str) -> Res
     browser::with(|ui| {
         let (win, role) = match ui.roles.get(&browser_id) {
             Some(r) => *r,
+            // The page loaded before its browser was filed under a window; it asks again.
+            None if matches!(cmd, "ready" | "grace_ready") => return Err("starting".into()),
             None => (ui.focused().map(|w| w.id).ok_or("no window")?, Role::Tab(0)),
         };
         let settings_call = from_host == "settings" && cmd != "about";
         if settings_call || matches!(cmd, "bookmarks_import" | "bookmarks_export") {
             return crate::settings_api::call(ui, browser_id, cmd, args);
+        }
+        if cmd.starts_with("grace_") {
+            return crate::grace::call(ui, win, browser_id, cmd, args);
         }
         call(ui, win, role, cmd, args, from_host)
     })
@@ -339,11 +355,141 @@ fn call(ui: &mut Ui, win: u32, role: Role, cmd: &str, args: &Json, from_host: &s
         }
         "about" => Ok(about()),
         "proxy_set" => crate::settings_api::proxy_set(ui, args),
-        "site_shields" | "grace_toggle" | "site_clear" | "site_reset" => {
-            Err("Coming in the next update".into())
-        }
+        "site_shields" => site_shields(ui, win, args),
+        "site_clear" => site_clear(ui, win, args),
+        "site_reset" => site_reset(ui, win, args),
         _ => Err(format!("unknown call {cmd}")),
     }
+}
+
+/// A host the popup names, checked against the page it was opened for.
+fn site_host(ui: &mut Ui, win: u32, args: &Json) -> Result<String, String> {
+    let asked = arg_str(args, "host").trim().to_ascii_lowercase();
+    let url = ui
+        .active_tab(win)
+        .map(|t| t.url.clone())
+        .unwrap_or_default();
+    let shown = cottoncandy_core::omnibox::url_parts(&url)
+        .host
+        .to_ascii_lowercase();
+    let host = web_host(&url);
+    if host.is_empty() || (asked != shown && asked != host) {
+        return Err("That site isn't open in this tab.".into());
+    }
+    Ok(host.trim_start_matches("www.").to_string())
+}
+
+/// The host of a web page (no port), as site settings are kept; "" for anything else.
+fn web_host(url: &str) -> String {
+    url::Url::parse(url)
+        .ok()
+        .filter(|u| matches!(u.scheme(), "http" | "https"))
+        .and_then(|u| u.host_str().map(|h| h.to_ascii_lowercase()))
+        .unwrap_or_default()
+}
+
+/// One switch on the Shields or site popup, for the site in the active tab. Reloads it so the change shows.
+fn site_shields(ui: &mut Ui, win: u32, args: &Json) -> Res {
+    let host = site_host(ui, win, args)?;
+    let value = args
+        .get("value")
+        .and_then(Json::as_bool)
+        .ok_or("value must be true or false")?;
+    let field = arg_str(args, "field").to_string();
+    crate::settings_api::change(ui, |old| {
+        let mut new = old.clone();
+        let site = new.sites.entry(host.clone()).or_default();
+        match field.as_str() {
+            "shields_up" => site.shields_up = (!value).then_some(false),
+            "ads" => site.ads = (value != old.shields.block_ads).then_some(value),
+            // `value` is "scripts blocked"; the setting stores "scripts allowed".
+            "scripts" => site.scripts = (value != old.shields.block_scripts).then_some(!value),
+            _ => return Err(format!("unknown switch {field}")),
+        }
+        if *site == Default::default() {
+            new.sites.remove(&host);
+        }
+        Ok(new)
+    })?;
+    if let Some(tab) = ui.active_tab(win) {
+        if let Some(b) = &tab.browser {
+            b.reload();
+        }
+    }
+    popup_info(ui, win, "shields").ok_or_else(|| "no tab".into())
+}
+
+/// Deletes the cookies and stored data (local storage, IndexedDB, cache) of the site in the active tab.
+fn site_clear(ui: &mut Ui, win: u32, args: &Json) -> Res {
+    let host = site_host(ui, win, args)?;
+    let tab = ui.active_tab(win).ok_or("no tab")?;
+    let browser = tab.browser.clone().ok_or("no tab")?;
+    let context = browser.host().and_then(|h| h.request_context());
+    let mut origins: Vec<String> = url::Url::parse(&tab.url)
+        .map(|u| u.origin().ascii_serialization())
+        .into_iter()
+        .collect();
+    for scheme in ["https", "http"] {
+        for h in [host.clone(), format!("www.{host}")] {
+            let origin = format!("{scheme}://{h}");
+            if !origins.contains(&origin) {
+                origins.push(origin);
+            }
+        }
+    }
+    for origin in &origins {
+        if let Some(m) = context.as_ref().and_then(|c| c.cookie_manager(None)) {
+            m.delete_cookies(Some(&cs(&format!("{origin}/"))), None, None);
+        }
+        if let (Some(host), Some(mut params)) = (browser.host(), dictionary_value_create()) {
+            params.set_string(Some(&cs("origin")), Some(&cs(origin)));
+            params.set_string(Some(&cs("storageTypes")), Some(&cs("all")));
+            host.execute_dev_tools_method(
+                0,
+                Some(&cs("Storage.clearDataForOrigin")),
+                Some(&mut params),
+            );
+        }
+    }
+    browser.reload();
+    Ok(json!({ "cleared": host }))
+}
+
+/// Forgets what the site in the active tab was allowed or blocked: permissions and its Shields overrides.
+fn site_reset(ui: &mut Ui, win: u32, args: &Json) -> Res {
+    let host = site_host(ui, win, args)?;
+    let context = ui
+        .active_tab(win)
+        .and_then(|t| t.browser.as_ref())
+        .and_then(|b| b.host())
+        .and_then(|h| h.request_context());
+    for h in [host.clone(), format!("www.{host}")] {
+        if let Some(c) = &context {
+            crate::shields::reset_site(c, &h);
+        }
+        if let Some(c) = request_context_get_global_context() {
+            crate::shields::reset_site(&c, &h);
+        }
+    }
+    crate::settings_api::change(ui, |old| {
+        let mut new = old.clone();
+        if let Some(site) = new.sites.get_mut(&host) {
+            // Zoom isn't a permission; keep it.
+            let zoom = site.zoom;
+            *site = cottoncandy_core::settings::SiteSettings {
+                zoom,
+                ..Default::default()
+            };
+            if *site == Default::default() {
+                new.sites.remove(&host);
+            }
+        }
+        Ok(new)
+    })?;
+    if let Some(b) = ui.active_tab(win).and_then(|t| t.browser.clone()) {
+        b.reload();
+    }
+    Ok(json!({ "reset": host }))
 }
 
 fn suggest(text: &str) -> Res {
@@ -384,7 +530,14 @@ fn suggest(text: &str) -> Res {
     } else {
         items.push(search);
     }
-    items.truncate(8);
+    items.truncate(if crate::grace::offered() { 6 } else { 8 });
+    if crate::grace::offered() && !trimmed.is_empty() {
+        // Words, not an address: Grace can improve them. Nothing runs until one of these is picked.
+        if is_search {
+            items.push(json!({"kind": "enhance", "url": "", "title": "Enhance search with Grace", "fill": trimmed, "query": trimmed}));
+        }
+        items.push(json!({"kind": "ask", "url": "", "title": format!("Ask Grace “{trimmed}”"), "fill": trimmed, "query": trimmed}));
+    }
     Ok(json!({ "items": items, "autocomplete": true }))
 }
 
@@ -402,12 +555,16 @@ pub(crate) fn popup_info(ui: &mut Ui, win: u32, kind: &str) -> Option<Json> {
                 .active_tab(win)
                 .map(|t| t.url.clone())
                 .unwrap_or_default();
+            let (ads, trackers) = ui
+                .active_tab(win)
+                .map(|t| t.shared.blocked())
+                .unwrap_or((0, 0));
             let parts = cottoncandy_core::omnibox::url_parts(&url);
             let settings = shared::settings();
-            let s = settings.shields_for(&parts.host);
+            let s = settings.shields_for(&web_host(&url));
             Some(json!({
                 "url": url, "host": parts.host, "kind": parts.kind, "on": s.shields_up, "ads": s.ads,
-                "scripts_blocked": s.scripts_blocked, "ads_blocked": 0, "trackers_blocked": 0,
+                "scripts_blocked": s.scripts_blocked, "ads_blocked": ads, "trackers_blocked": trackers,
             }))
         }
         "proxy" => {
@@ -829,7 +986,7 @@ pub fn command(ui: &mut Ui, win: u32, id: &str, arg: &Json) -> Res {
                 );
             }
         }
-        "grace_toggle" => {}
+        "grace_toggle" => crate::grace::toggle(ui, win, None),
         _ => return Err(format!("unknown command {id}")),
     }
     Ok(json!({}))
