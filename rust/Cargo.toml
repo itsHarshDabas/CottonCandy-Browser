@@ -1,0 +1,9 @@
+[package]
+name = "cottoncandy"
+version = "0.1.0"
+edition = "2021"
+description = "CottonCandy, the GraceOS web browser, on Chromium (CEF)"
+publish = false
+
+[dependencies]
+cef = { version = "=156.7.0", default-features = false }
