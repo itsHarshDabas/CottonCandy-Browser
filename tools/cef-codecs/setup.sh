@@ -32,7 +32,7 @@ else
   free() { powershell -NoProfile -Command "[int]((Get-PSDrive $1 -ErrorAction SilentlyContinue).Free/1GB)" 2> /dev/null || echo 0; }
   c=$(free C) d=0
   [ -d /d ] && d=$(free D)
-  echo "Free: C: ${c} GB, D: ${d} GB"
+  echo "::notice::Free after cleanup: C: ${c} GB, D: ${d} GB"
   if [ "${d:-0}" -gt "${c:-0}" ]; then work=D:/w state=C:/state; else work=C:/w state=$([ -d /d ] && echo D:/state || echo C:/state); fi
   mkdir -p "$(cygpath -u "$work")" "$(cygpath -u "$state")"
   {
