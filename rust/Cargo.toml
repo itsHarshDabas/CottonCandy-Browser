@@ -1,9 +1,16 @@
-[package]
-name = "cottoncandy"
+[workspace]
+resolver = "2"
+members = ["core", "app"]
+
+[workspace.package]
 version = "0.1.0"
 edition = "2021"
-description = "CottonCandy, the GraceOS web browser, on Chromium (CEF)"
+rust-version = "1.85"
 publish = false
 
-[dependencies]
-cef = { version = "=156.7.0", default-features = false }
+[profile.release]
+lto = "thin"
+codegen-units = 1
+opt-level = 3
+strip = "symbols"
+panic = "abort"

@@ -6,7 +6,7 @@ on:
     paths: ["rust/**", ".github/workflows/rust.yml"]
   workflow_dispatch:
 permissions:
-  contents: read
+  contents: write
 env:
   CARGO_TERM_COLOR: always
   CEF_VERSION: "156.7.0+156.0.31"
@@ -49,14 +49,18 @@ jobs:
             cargo install export-cef-dir --version "=$CEF_VERSION" --locked
             export-cef-dir --force "$CEF_PATH"
           fi
-      - name: Share the Linux CEF build (for development sandboxes without CEF's CDN)
-        if: runner.os == 'Linux' && github.event_name == 'push'
-        uses: actions/upload-artifact@v4
-        with:
-          name: cef-linux64-${{ env.CEF_VERSION }}
-          path: ${{ matrix.cef_dir }}
-          retention-days: 7
-          compression-level: 6
+      # Development sandboxes can't reach CEF's CDN; a draft release (never public) carries a copy for them.
+      - name: Share the Linux CEF build with development sandboxes
+        if: runner.os == 'Linux' && github.event_name == 'push' && github.ref != 'refs/heads/main'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          tag="cef-dev-${CEF_VERSION%%+*}"
+          if ! gh release view "$tag" >/dev/null 2>&1; then
+            tar -C "$CEF_PATH" -cf - . | zstd -T0 -10 -o /tmp/cef-linux64.tar.zst
+            gh release create "$tag" --draft --title "CEF $CEF_VERSION for development (not a release)" \
+              --notes "A copy of CEF's Linux build for development sandboxes. Not a CottonCandy release." /tmp/cef-linux64.tar.zst
+          fi
       - run: cargo fmt --check
       - run: cargo clippy --all-targets -- -D warnings
       - run: cargo test
