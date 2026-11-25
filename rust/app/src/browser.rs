@@ -1261,6 +1261,9 @@ pub fn apply_network_settings(context: Option<&RequestContext>) -> Option<String
         "webrtc.ip_handling_policy",
         &json!(settings.privacy.webrtc_ip_policy),
     );
+    // No preconnecting or prefetching: Chromium would open connections to hosts (ad servers among them)
+    // that Shields never sees a request for.
+    let _ = set_pref(&context, "net.network_prediction_options", &json!(2));
     let _ = set_pref(
         &context,
         "enable_do_not_track",

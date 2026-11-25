@@ -11,6 +11,15 @@ env:
   CARGO_TERM_COLOR: always
   CEF_VERSION: "156.7.0+156.0.31"
 jobs:
+  # Known vulnerabilities (RustSec), yanked crates, licenses and crate sources: see rust/deny.toml.
+  audit:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: EmbarkStudios/cargo-deny-action@v2
+        with:
+          manifest-path: rust/Cargo.toml
+          command: check
   build:
     strategy:
       fail-fast: false

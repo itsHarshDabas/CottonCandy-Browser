@@ -24,3 +24,9 @@ jobs:
           assert int(QWebEngineScript.ScriptWorldId.ApplicationWorld.value) == 1;
           assert hasattr(QProcess.ProcessError, 'FailedToStart') and hasattr(QProcess, 'startDetached');
           print('pyside6 + qt6-webengine OK')"
+  # Static security analysis of the Python browser; fails on medium or high findings.
+  bandit:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: pipx run bandit --severity-level medium -q cottoncandy
