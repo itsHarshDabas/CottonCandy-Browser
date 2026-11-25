@@ -9,10 +9,12 @@ mod app;
 mod browser;
 mod cefx;
 mod client;
+mod grace;
 mod icon;
 mod scheme;
 mod settings_api;
 mod shared;
+mod shields;
 
 use cef::*;
 

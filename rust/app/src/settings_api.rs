@@ -246,6 +246,15 @@ fn apply(ui: &mut Ui, old: &Settings, new: &Settings) {
             }
         }
     }
+    if old.shields.filter_lists != new.shields.filter_lists
+        || old.shields.custom_rules != new.shields.custom_rules
+    {
+        crate::shields::rebuild();
+        crate::shields::update_lists();
+    }
+    if old.sites != new.sites || old.shields.block_scripts != new.shields.block_scripts {
+        browser::apply_site_settings(ui, new);
+    }
     if old.appearance != new.appearance {
         refresh_theme(ui);
         ui.relayout();
@@ -409,6 +418,7 @@ type Done = Arc<dyn Fn(Result<Vec<u8>, String>) + Send + Sync>;
 wrap_urlrequest_client! {
     struct Fetch {
         body: Arc<Mutex<Vec<u8>>>,
+        max: usize,
         done: Done,
     }
 
@@ -418,7 +428,7 @@ wrap_urlrequest_client! {
                 return;
             }
             let mut body = self.body.lock().unwrap();
-            if body.len() + data_length > ext::MAX_PACKAGE_BYTES {
+            if body.len() + data_length > self.max {
                 if let Some(r) = request {
                     r.cancel();
                 }
@@ -437,24 +447,25 @@ wrap_urlrequest_client! {
             let result = if ok && status == 200 {
                 Ok(body)
             } else if ok {
-                Err(format!("The store answered with error {status}."))
+                Err(format!("The server answered with error {status}."))
             } else {
-                Err("Couldn't reach the store. Check your connection or proxy.".into())
+                Err("Couldn't reach the server. Check your connection or proxy.".into())
             };
             (self.done)(result);
         }
     }
 }
 
-/// Downloads `url` through the normal network settings (proxy, DNS) and calls `done` on the UI thread.
-fn fetch(url: &str, done: Done) {
+/// Downloads `url` (at most `max` bytes) through the normal network settings (proxy, DNS) and calls `done`
+/// on the UI thread.
+pub(crate) fn fetch(url: &str, max: usize, done: Done) {
     let Some(mut request) = request_create() else {
         done(Err("Couldn't start the download.".into()));
         return;
     };
     request.set_url(Some(&cs(url)));
     request.set_method(Some(&cs("GET")));
-    let mut client = Fetch::new(Arc::new(Mutex::new(Vec::new())), done);
+    let mut client = Fetch::new(Arc::new(Mutex::new(Vec::new())), max, done);
     let mut context = request_context_get_global_context();
     let _ = urlrequest_create(Some(&mut request), Some(&mut client), context.as_mut());
 }
@@ -479,6 +490,7 @@ fn install_extension(browser_id: i32, source: ext::Source) {
             let report2 = report;
             fetch(
                 &ext::chrome_download_url(&id, &chromium),
+                ext::MAX_PACKAGE_BYTES,
                 Arc::new(move |result| {
                     let report = report2;
                     let id = id.clone();
@@ -493,6 +505,7 @@ fn install_extension(browser_id: i32, source: ext::Source) {
             let report2 = report;
             fetch(
                 &ext::firefox_api_url(&slug),
+                1024 * 1024,
                 Arc::new(move |result| {
                     let xpi = result.and_then(|body| {
                         ext::firefox_xpi_url(&String::from_utf8_lossy(&body))
@@ -504,6 +517,7 @@ fn install_extension(browser_id: i32, source: ext::Source) {
                         Err(e) => report(json!({ "error": e })),
                         Ok(url) => fetch(
                             &url,
+                            ext::MAX_PACKAGE_BYTES,
                             Arc::new(move |result| {
                                 let slug = slug.clone();
                                 std::thread::spawn(move || report(finish_firefox(&slug, result)));

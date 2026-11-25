@@ -26,6 +26,17 @@ pub fn config_dir() -> PathBuf {
         .join("cottoncandy")
 }
 
+/// CherryCola's settings, which say where its model servers are: `~/.config/grace/cherrycola.conf` or
+/// `%APPDATA%\grace\cherrycola.conf`.
+pub fn cherrycola_conf() -> PathBuf {
+    let base = if cfg!(windows) {
+        env_dir("APPDATA").unwrap_or_else(|| home().join("AppData").join("Roaming"))
+    } else {
+        env_dir("XDG_CONFIG_HOME").unwrap_or_else(|| home().join(".config"))
+    };
+    base.join("grace").join("cherrycola.conf")
+}
+
 /// History, bookmarks, the browser profile, extensions: `~/.local/share/cottoncandy` or `%LOCALAPPDATA%\CottonCandy`.
 pub fn data_dir() -> PathBuf {
     if cfg!(windows) {

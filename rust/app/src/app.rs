@@ -80,6 +80,11 @@ wrap_browser_process_handler! {
         fn on_context_initialized(&self) {
             scheme::register();
             browser::apply_network_settings(None);
+            if let Some(global) = request_context_get_global_context() {
+                crate::shields::apply_scripts(&global, &crate::shared::settings());
+            }
+            crate::shields::start();
+            crate::grace::warm_up();
             let urls = browser::startup_urls(&std::env::args().skip(1).collect::<Vec<_>>());
             browser::open_window(false, urls);
         }

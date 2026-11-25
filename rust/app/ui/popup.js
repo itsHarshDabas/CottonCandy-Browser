@@ -34,9 +34,9 @@
     },
     suggest(d) {
       box.setAttribute("role", "listbox");
-      box.innerHTML = d.items.map((s, i) => `<div class="item ${i === d.selected ? "sel" : ""}" data-i="${i}" role="option">
-        ${cc.icon({ history: "clock", bookmark: "star", search: "search", url: "globe", internal: "spark" }[s.kind] || "globe")}
-        <span class="t">${esc(s.title || s.url)}</span>${s.title && s.kind !== "search" ? `<span class="u">— ${esc(s.url)}</span>` : ""}</div>`).join("");
+      box.innerHTML = d.items.map((s, i) => `<div class="item ${i === d.selected ? "sel" : ""}" data-i="${i}" data-kind="${esc(s.kind)}" role="option">
+        ${cc.icon({ history: "clock", bookmark: "star", search: "search", url: "globe", internal: "spark", enhance: "spark", enhanced: "spark", enhancing: "spark", ask: "spark", note: "info" }[s.kind] || "globe")}
+        <span class="t ${s.kind === "enhancing" ? "dots" : ""}">${esc(s.title || s.url)}</span>${s.group ? `<span class="u">— ${esc(s.group)}</span>` : ["enhance", "ask"].includes(s.kind) ? '<span class="u">— Local AI · on this device</span>' : s.title && s.url && s.kind !== "search" ? `<span class="u">— ${esc(s.url)}</span>` : ""}</div>`).join("");
       box.querySelectorAll(".item").forEach(el => el.addEventListener("mousedown", e => {
         e.preventDefault();
         call("suggest_pick", { index: Number(el.dataset.i) });
@@ -166,5 +166,6 @@
     if (e.key === "Enter" && document.activeElement.classList.contains("item")) document.activeElement.click();
   });
   window.addEventListener("blur", () => { if (current && current.kind !== "suggest") hide(); });
-  call("ready", { role: "popup" });
+  // The browser may not have filed this page under its window yet; ask again until it has.
+  (function ready() { cc.call("ready", { role: "popup" }).catch(() => setTimeout(ready, 50)); })();
 })();

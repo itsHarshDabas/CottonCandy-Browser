@@ -198,6 +198,7 @@
     popup("suggest", { x: r.x, y: r.y + r.height + 4, width: r.width, height: Math.min(8, suggestions.length) * 36 + 12 }, { items: suggestions, selected });
   }
   async function suggest() {
+    enhancing = null;
     const text = $("url").value;
     typedText = text;
     if (!text.trim()) return hideSuggestions();
@@ -207,6 +208,34 @@
     selected = suggestions.length && result.autocomplete ? 0 : -1;
     showSuggestions();
   }
+
+  // Grace rows: Enhance search asks Grace for better words and shows them first; Ask Grace opens Grace Chat.
+  function choose(choice, newTab) {
+    if (choice && (choice.kind === "enhancing" || choice.kind === "note")) return;
+    if (choice && choice.kind === "enhance") return enhance(choice.query);
+    hideSuggestions();
+    $("url").blur();
+    if (choice && choice.kind === "ask") return call("grace_ask", { question: choice.query });
+    call("navigate", { text: choice ? choice.url : $("url").value, new_tab: newTab, typed: true });
+  }
+  function enhance(query) {
+    const asTyped = suggestions.find(s => s.kind === "search");
+    suggestions = [{ kind: "enhancing", title: "Grace is improving your search…", url: "" }].concat(asTyped ? [asTyped] : []);
+    selected = -1;
+    showSuggestions();
+    call("grace_enhance", { query }).catch(e => cc.emit("enhanced", { query, error: e.message }));
+    enhancing = { query, asTyped };
+  }
+  let enhancing = null;
+  cc.on("enhanced", d => {
+    if (!enhancing || enhancing.query !== d.query || !editing) return;
+    const asTyped = enhancing.asTyped;
+    enhancing = null;
+    suggestions = d.error ? [{ kind: "note", title: d.error, url: "" }].concat(asTyped ? [asTyped] : []) : d.items;
+    selected = d.error ? (asTyped ? 1 : -1) : 0;
+    if (!d.error && suggestions[0]) $("url").value = suggestions[0].fill;
+    showSuggestions();
+  });
 
   function initToolbar() {
     for (const [id, icon] of [["back", "back"], ["forward", "forward"], ["reload", "reload"], ["home", "home"], ["newtab", "plus"],
@@ -242,11 +271,7 @@
         showSuggestions();
       } else if (e.key === "Enter") {
         e.preventDefault();
-        const choice = selected >= 0 ? suggestions[selected] : null;
-        const text = choice ? choice.url : url.value;
-        hideSuggestions();
-        url.blur();
-        call("navigate", { text, new_tab: e.altKey, typed: true });
+        choose(selected >= 0 ? suggestions[selected] : null, e.altKey);
       } else if (e.key === "Escape") {
         if (suggestions.length) hideSuggestions();
         else { url.value = state ? state.nav.url || "" : ""; url.blur(); call("focus_page", {}); }
@@ -309,8 +334,7 @@
   });
   cc.on("suggest_pick", index => {
     const choice = suggestions[index];
-    hideSuggestions();
-    if (choice) { $("url").blur(); call("navigate", { text: choice.url, typed: true }); }
+    if (choice) choose(choice, false);
   });
 
   if (vertical) {
@@ -319,5 +343,6 @@
   } else {
     initToolbar();
   }
-  call("ready", { role: vertical ? "vtabs" : "chrome" });
+  // The browser may not have filed this page under its window yet; ask again until it has.
+  (function ready() { cc.call("ready", { role: vertical ? "vtabs" : "chrome" }).catch(() => setTimeout(ready, 50)); })();
 })();
