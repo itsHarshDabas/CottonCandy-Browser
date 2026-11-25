@@ -16,7 +16,7 @@ if (Test-Path (Join-Path $kits "Include\$version\um")) {
     '10.0.28000.0' = 'https://download.microsoft.com/download/e6cfffdc-0d3e-4c6c-96d7-d491da459a07/KIT_BUNDLE_WINDOWSSDK_MEDIACREATION/winsdksetup.exe'
   }
   $url = $installers[$version]
-  if (-not $url) { throw "No installer known for Windows SDK $version: add it to win-sdk.ps1" }
+  if (-not $url) { throw "No installer known for Windows SDK ${version}: add it to win-sdk.ps1" }
   $setup = Join-Path $env:RUNNER_TEMP 'winsdksetup.exe'
   Invoke-WebRequest $url -OutFile $setup
   $p = Start-Process $setup -ArgumentList '/features', '+', '/quiet', '/norestart', '/ceip', 'off', '/log', (Join-Path $env:RUNNER_TEMP 'winsdk.log') -Wait -PassThru
