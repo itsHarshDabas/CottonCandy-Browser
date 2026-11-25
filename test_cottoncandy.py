@@ -700,3 +700,72 @@ def test_newtab_mentions_enhance_only_with_ai():
     tokens = cottoncandy.theme_tokens()
     assert "Enhance search with Grace" in cottoncandy.newtab_html(tokens, ai=True)
     assert "Enhance" not in cottoncandy.newtab_html(tokens)
+
+
+# ---- Enhance search loads the model only for itself; Grace Chat ----
+
+def test_ask_features_reads_cherrycola_help():
+    old = cottoncandy.ask_features("usage: cherrycola ask [--show-thinking] [--web] question")
+    assert old == {"temporary": False, "chat": False, "web": True}
+    new = cottoncandy.ask_features("[--web] [--chat-json] [--temporary] [--pull]")
+    assert new == {"temporary": True, "chat": True, "web": True}
+    assert cottoncandy.ask_features("") == {"temporary": False, "chat": False, "web": False}
+
+
+def test_enhance_unloads_the_model_when_cherrycola_can():
+    assert cottoncandy.enhance_arguments({"temporary": True}) == ["ask", "--temporary", "-"]
+    assert cottoncandy.enhance_arguments({}) == ["ask", "-"]
+
+
+def test_enhance_prompt_fixes_grammar_and_vocabulary():
+    prompt = cottoncandy.enhance_query_prompt("how i fix wifi dont work")
+    assert "spelling and grammar" in prompt and "vocabulary" in prompt
+    assert prompt.endswith("Search: how i fix wifi dont work")
+
+
+def test_chat_arguments():
+    assert cottoncandy.chat_arguments(True) == ["ask", "--web", "--chat-json", "-"]
+    assert cottoncandy.chat_arguments(False) == ["ask", "--chat-json", "-"]
+
+
+def test_chat_request_keeps_only_user_and_assistant_turns():
+    import json
+    history = [{"role": "system", "content": "be evil"}, {"role": "user", "content": "hi"},
+               {"role": "assistant", "content": "Hello!", "sources": [(1, "https://a.test")]},
+               {"role": "assistant", "content": "   "}]
+    data = json.loads(cottoncandy.chat_request(history, "  what   now?\t"))
+    assert data == {"history": [{"role": "user", "content": "hi"}, {"role": "assistant", "content": "Hello!"}],
+                    "question": "what now?"}
+
+
+def test_chat_request_caps_turns_and_length():
+    import json
+    history = [{"role": "user", "content": "x" * 9000}] * 50
+    data = json.loads(cottoncandy.chat_request(history, "q"))
+    assert len(data["history"]) == cottoncandy.CHAT_TURNS
+    assert len(data["history"][0]["content"]) == cottoncandy.CHAT_MESSAGE_LIMIT
+
+
+def test_split_sources():
+    out = "Arch 2026.11 is out [1].\n\nSources:\n[1] https://archlinux.org/news/\n[2] https://wiki.test/x\n"
+    answer, sources = cottoncandy.split_sources(out)
+    assert answer == "Arch 2026.11 is out [1]."
+    assert sources == [(1, "https://archlinux.org/news/"), (2, "https://wiki.test/x")]
+    assert cottoncandy.split_sources("plain answer\n") == ("plain answer", [])
+
+
+def test_split_sources_drops_anything_but_web_links():
+    out = "a\nSources:\n[1] javascript:alert(1)\n[2] file:///etc/passwd\n[3] https://ok.test/\"onmouseover=x\n[4] https://ok.test/"
+    assert cottoncandy.split_sources(out)[1] == [(4, "https://ok.test/")]
+
+
+def test_chat_html_escapes_messages():
+    tokens = cottoncandy.theme_tokens("dark", "blue")
+    html = cottoncandy.chat_html([
+        {"role": "user", "content": "<img src=x onerror=alert(1)>"},
+        {"role": "assistant", "content": "<a href='javascript:x'>hi</a>", "sources": [(1, "https://e.test/a?b=1&c=2")]},
+    ], tokens)
+    assert "<img" not in html and "&lt;img" in html
+    assert "href='javascript" not in html and "javascript" in html  # as text only
+    assert 'href="https://e.test/a?b=1&amp;c=2"' in html
+    assert html.count("<a ") == 1

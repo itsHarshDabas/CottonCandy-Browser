@@ -505,8 +505,9 @@ def enhance_query_prompt(query):
     query = re.sub(r"\s+", " ", query or "").strip()[:ENHANCE_QUERY_LIMIT]
     return (
         "Rewrite the search below as one better web search query for a search engine like DuckDuckGo. "
-        "Keep the user's meaning and language. Fix spelling, use the precise names and keywords a good page "
-        "would contain, and add a year, version or quotes only when they clearly help. Don't answer the question. "
+        "Keep the user's meaning and language. Fix spelling and grammar, replace vague or wrong words with the "
+        "right vocabulary, use the precise names and keywords a good page would contain, and add a year, version "
+        "or quotes only when they clearly help. Don't answer the question. "
         "Reply with the query alone on one line: no quotes around it, no explanation, no list.\n"
         "Search: " + query
     )
@@ -535,6 +536,84 @@ def clean_enhanced_query(output, original=""):
     if not line or len(line) > ENHANCE_QUERY_LIMIT or line.endswith(":"):
         return None
     return line
+
+
+def ask_features(help_text):
+    """Which newer `cherrycola ask` options this CherryCola has, from `cherrycola ask --help`.
+
+    temporary: load the model only for one answer, then unload it (Enhance search).
+    chat: --chat-json, a question with earlier turns (Grace Chat). web: --web, answers from web results.
+    """
+    text = help_text or ""
+    return {"temporary": "--temporary" in text, "chat": "--chat-json" in text, "web": "--web" in text}
+
+
+def enhance_arguments(features):
+    """`cherrycola ask` arguments for Enhance search: the model is loaded just for this and unloaded after."""
+    return ["ask"] + (["--temporary"] if features.get("temporary") else []) + ["-"]
+
+
+CHAT_TURNS = 20
+CHAT_MESSAGE_LIMIT = 4000
+
+
+def chat_arguments(web):
+    return ["ask"] + (["--web"] if web else []) + ["--chat-json", "-"]
+
+
+def chat_request(history, question):
+    """What Grace Chat sends to `cherrycola ask --chat-json -` on stdin: the earlier turns and the new message.
+
+    Only the user's and Grace's own turns go (no system turns), the last CHAT_TURNS, each cut to a limit.
+    With web results on, CherryCola searches only `question`, never the earlier turns.
+    """
+    turns = [{"role": t["role"], "content": t["content"][:CHAT_MESSAGE_LIMIT]} for t in history or []
+             if t.get("role") in ("user", "assistant") and isinstance(t.get("content"), str) and t["content"].strip()]
+    question = re.sub(r"[ \t]+", " ", question or "").strip()[:CHAT_MESSAGE_LIMIT]
+    return json.dumps({"history": turns[-CHAT_TURNS:], "question": question})
+
+
+def split_sources(output):
+    """A `cherrycola ask --web` reply as (answer, sources): the "Sources:" list it prints last, as http(s) links.
+
+    Anything in that list that isn't a plain http or https address is dropped, so a source can only ever be a
+    web page for the user to open themselves.
+    """
+    text = re.sub(r"<think>.*?</think>", "", output or "", flags=re.S | re.I)
+    head, sep, tail = text.rpartition("\nSources:\n")
+    if not sep:
+        return text.strip(), []
+    sources = []
+    for line in tail.splitlines():
+        match = re.match(r"^\s*\[(\d{1,2})\]\s+(\S+)\s*$", line)
+        if not match:
+            break
+        url = match.group(2)
+        if url_scheme(url) in ("http", "https") and len(url) <= 2000 and not re.search(r"[\x00-\x20\x7f\"'<>`]", url):
+            sources.append((int(match.group(1)), url))
+    return head.strip(), sources
+
+
+def chat_html(turns, tokens):
+    """The Grace Chat transcript as rich text for a QTextBrowser. Every message is escaped: only sources link."""
+    t = tokens
+    parts = []
+    for turn in turns:
+        body = _esc(turn["content"]).replace("\n", "<br>") or "…"
+        if turn["role"] == "user":
+            parts.append('<table width="100%" cellspacing="0" cellpadding="0"><tr><td width="18%"></td>'
+                         '<td style="background:{bg};color:#ffffff;padding:7px 10px;border-radius:12px">{body}</td></tr></table>'
+                         .format(bg=t["accent_fill"], body=body))
+        else:
+            sources = "".join(
+                '<br><a style="color:{c};text-decoration:none" href="{u}">[{n}] {h}</a>'.format(
+                    c=t["accent_text"], u=_esc(url), n=n, h=_esc(url_parts(url)["host"] or url))
+                for n, url in turn.get("sources", []))
+            note = '<br><span style="color:{c}">{n}</span>'.format(c=t["text_secondary"], n=_esc(turn["note"])) if turn.get("note") else ""
+            parts.append('<table width="100%" cellspacing="0" cellpadding="0"><tr>'
+                         '<td style="background:{bg};color:{fg};padding:7px 10px;border-radius:12px">{body}{src}{note}</td>'
+                         '<td width="10%"></td></tr></table>'.format(bg=t["card"], fg=t["text"], body=body, src=sources, note=note))
+    return '<div style="font-size:13px">' + '<div style="height:8px"></div>'.join(parts) + "</div>"
 
 
 def grace_failure(exit_code, stderr=""):
@@ -864,6 +943,12 @@ QPushButton#action {{
 }}
 QPushButton#action:hover {{ background: {hover}; }}
 QPushButton#action:disabled {{ color: {tertiary}; }}
+QPushButton#segment {{ background: transparent; color: {secondary}; border-radius: 8px; padding: 0 10px; font-size: 12.5px; }}
+QPushButton#segment:hover {{ background: {hover}; color: {text}; }}
+QPushButton#segment:checked {{ background: {control_strong}; color: {strong}; font-weight: 600; }}
+QPushButton#toggle {{ background: {control}; color: {secondary}; border-radius: 12px; padding: 0 12px; min-height: 24px; font-size: 12px; }}
+QPushButton#toggle:checked {{ background: {fill}; color: #ffffff; }}
+QTextBrowser#chatlog {{ background: transparent; border: none; color: {text}; selection-background-color: {fill}; selection-color: #ffffff; }}
 """.format(
         font=DEFAULT_FONT, window=t["window"], titlebar=t["titlebar"], subtle=t["subtle"], panel=t["panel"],
         hair=t["hair"], card=t["card"], control=t["control"], control_strong=t["control_strong"],
@@ -1223,6 +1308,7 @@ def main(argv=None):
         QStackedWidget,
         QStyleFactory,
         QTabBar,
+        QTextBrowser,
         QToolButton,
         QVBoxLayout,
         QWidget,
@@ -2071,6 +2157,227 @@ def main(argv=None):
     READ_PAGE_SCRIPT = "(function(){var b=document.body;return b?String(b.innerText||'').slice(0,200000):'';})()"
     APPLICATION_WORLD = 1  # QWebEngineScript.ScriptWorldId.ApplicationWorld
 
+    _features = {}
+
+    def cherrycola_features():
+        """ask_features() for the installed CherryCola, checked once (a missing CherryCola has none)."""
+        if not _features:
+            try:
+                import subprocess
+                result = subprocess.run([GRACE_COMMAND, "ask", "--help"], capture_output=True, text=True, timeout=10, check=False)
+                _features.update(ask_features(result.stdout))
+            except (OSError, subprocess.SubprocessError):
+                return ask_features("")
+        return _features
+
+    class GraceChat(QWidget):
+        """Grace Chat: talk with the model on this computer, optionally answered from web results with sources.
+
+        With "Web results" on, only the newest message is searched (DuckDuckGo, or the SearXNG CherryCola is set to)
+        and the pages are read on this computer; the earlier turns never leave it. Replies are escaped text, and
+        only the sources CherryCola lists become links, which open in a new tab when clicked.
+        """
+
+        def __init__(self, window, panel):
+            super().__init__()
+            self._window = window
+            self._panel = panel
+            self._turns = []
+            self._process = None
+            self._decoder = None
+            self._out = ""
+            self._stderr = b""
+            layout = QVBoxLayout(self)
+            layout.setContentsMargins(0, 0, 0, 0)
+            layout.setSpacing(8)
+            self._log = QTextBrowser()
+            self._log.setObjectName("chatlog")
+            self._log.setOpenLinks(False)
+            self._log.setOpenExternalLinks(False)
+            self._log.anchorClicked.connect(self._open_source)
+            self._log.setAccessibleName("Grace Chat")
+            layout.addWidget(self._log, 1)
+            self._empty = label("Ask anything. With web results on, Grace searches the web for your message, reads the top "
+                                "pages on this computer and answers with numbered sources.", "about", wrap=True)
+            layout.addWidget(self._empty)
+            self._message = label("", "gracemessage", wrap=True)
+            self._message.hide()
+            layout.addWidget(self._message)
+            row = QHBoxLayout()
+            row.setSpacing(6)
+            self._web = QPushButton("Web results")
+            self._web.setObjectName("toggle")
+            self._web.setCheckable(True)
+            self._web.setChecked(True)
+            self._web.setToolTip("On: your message is searched on the web and Grace answers from the pages, with sources.\n"
+                                 "Off: Grace answers from the model alone, and nothing leaves this computer.")
+            self._web.toggled.connect(lambda _on: self._update())
+            row.addWidget(self._web)
+            row.addStretch(1)
+            self._stop = QPushButton("Stop")
+            self._stop.clicked.connect(self.stop)
+            self._stop.hide()
+            row.addWidget(self._stop)
+            self._download = QPushButton("Download the model")
+            self._download.setObjectName("primary")
+            self._download.clicked.connect(self._pull)
+            self._download.hide()
+            row.addWidget(self._download)
+            self._new = QPushButton("New chat")
+            self._new.clicked.connect(self.clear)
+            row.addWidget(self._new)
+            layout.addLayout(row)
+            self._input = QLineEdit()
+            self._input.setPlaceholderText("Message Grace")
+            self._input.setFixedHeight(32)
+            self._input.returnPressed.connect(lambda: self.send(self._input.text()))
+            layout.addWidget(self._input)
+            self._note = label("", "gracenote", wrap=True)
+            layout.addWidget(self._note)
+            self._update()
+
+        @property
+        def running(self):
+            return self._process is not None
+
+        def focus_input(self):
+            self._input.setFocus()
+
+        def _update(self):
+            self._note.setText(
+                "Web results on: your message (only the newest one) goes to the search engine CherryCola uses. "
+                "The model and your chat stay on this computer." if self._web.isChecked() else
+                "Web results off: nothing leaves this computer.")
+            self._input.setEnabled(not self.running)
+            self._new.setEnabled(bool(self._turns) and not self.running)
+            self._stop.setVisible(self.running)
+            self._empty.setVisible(not self._turns)
+            self._log.setVisible(bool(self._turns))
+
+        def _render(self):
+            self._log.setHtml(chat_html(self._turns, tok()))
+            bar = self._log.verticalScrollBar()
+            bar.setValue(bar.maximum())
+
+        def apply_theme(self):
+            if self._turns:
+                self._render()
+
+        def _show_message(self, text, error=False):
+            self._message.setText(text)
+            self._message.setProperty("error", error)
+            repolish(self._message)
+            self._message.setVisible(bool(text))
+
+        def send(self, text):
+            text = re.sub(r"\s+", " ", text or "").strip()
+            if not text or self.running or not theme["ai"]:
+                return
+            remote = self._panel.remote_host()
+            if remote:
+                self._show_message("CherryCola is set to use a model server at {}. Grace only uses a model on this "
+                                   "computer, so Chat stays off.".format(remote), error=True)
+                return
+            features = cherrycola_features()
+            if not features.get("chat"):
+                self._show_message("Grace Chat needs a newer CherryCola (one with “ask --chat-json”). Update the "
+                                   "cherrycolallm package and try again." if shutil.which(GRACE_COMMAND) else
+                                   grace_failure(None)[1], error=True)
+                return
+            web = self._web.isChecked() and features.get("web")
+            history = [t for t in self._turns if not t.get("failed")]
+            self._turns.append({"role": "user", "content": text})
+            self._turns.append({"role": "assistant", "content": "", "sources": [],
+                                "note": "Searching the web and reading pages…" if web else "Thinking…"})
+            self._input.clear()
+            self._show_message("")
+            self._download.hide()
+            self._out = ""
+            self._stderr = b""
+            self._decoder = codecs.getincrementaldecoder("utf-8")(errors="replace")
+            process = QProcess(self)
+            process.setProgram(GRACE_COMMAND)
+            process.setArguments(chat_arguments(web))  # the chat goes on stdin, never on the command line
+            process.readyReadStandardOutput.connect(lambda: self._read(process))
+            process.readyReadStandardError.connect(lambda: self._read_error(process))
+            process.finished.connect(lambda code, status: self._finished(process, code, status))
+            process.errorOccurred.connect(lambda error: self._process_error(process, error))
+            self._process = process
+            self._update()
+            self._render()
+            process.start()
+            process.write(chat_request(history, text).encode("utf-8"))
+            process.closeWriteChannel()
+
+        def _read(self, process):
+            if process is not self._process:
+                return
+            piece = self._decoder.decode(bytes(process.readAllStandardOutput()))
+            if piece:
+                self._out += piece
+                answer, _sources = split_sources(self._out)
+                self._turns[-1].update(content=answer.split("\nSources:")[0], note="")
+                self._render()
+
+        def _read_error(self, process):
+            if process is self._process:
+                self._stderr = (self._stderr + bytes(process.readAllStandardError()))[-4000:]
+
+        def _finished(self, process, code, status):
+            if process is not self._process:
+                return
+            self._read(process)
+            self._read_error(process)
+            self._process = None
+            process.deleteLater()
+            turn = self._turns[-1]
+            answer, sources = split_sources(self._out)
+            turn.update(content=answer, sources=sources, note="")
+            if status == QProcess.ExitStatus.CrashExit:
+                turn.update(failed=True, note="CherryCola stopped unexpectedly.")
+            elif code != 0:
+                kind, message = grace_failure(code, self._stderr.decode("utf-8", "replace"))
+                turn.update(failed=True, note=message)
+                self._download.setVisible(kind == "model-missing")
+            elif not answer:
+                turn.update(failed=True, note="Grace had no answer.")
+            self._update()
+            self._render()
+
+        def _process_error(self, process, error):
+            if process is self._process and error == QProcess.ProcessError.FailedToStart:
+                self._process = None
+                process.deleteLater()
+                self._turns[-1].update(failed=True, note=grace_failure(None)[1])
+                self._update()
+                self._render()
+
+        def stop(self):
+            process, self._process = self._process, None
+            if process is not None:
+                process.kill()
+                process.waitForFinished(2000)
+                process.deleteLater()
+                self._turns[-1].update(failed=not self._turns[-1]["content"], note="Stopped.")
+                self._render()
+            self._update()
+
+        def clear(self):
+            self.stop()
+            self._turns = []
+            self._log.clear()
+            self._show_message("")
+            self._update()
+
+        def _pull(self):
+            self._download.hide()
+            self._show_message(self._panel.start_pull())
+
+        def _open_source(self, url):
+            text = url.toString()
+            if url_scheme(text) in ("http", "https"):
+                self._window.add_tab(text)
+
     class GracePanel(QWidget):
         """Grace: summarize or ask about the page with CherryCola on this computer. Nothing runs without a click;
         the answer is plain text that can't open, click or run anything."""
@@ -2106,6 +2413,29 @@ def main(argv=None):
             chip_row.addWidget(self._chip)
             chip_row.addStretch(1)
             layout.addLayout(chip_row)
+            modes = QHBoxLayout()
+            modes.setSpacing(4)
+            self._mode_buttons = {}
+            for mode, text in (("page", "This page"), ("chat", "Chat")):
+                button = QPushButton(text)
+                button.setObjectName("segment")
+                button.setCheckable(True)
+                button.setAutoExclusive(True)
+                button.setFixedHeight(28)
+                button.clicked.connect(lambda _checked=False, m=mode: self.set_mode(m))
+                modes.addWidget(button, 1)
+                self._mode_buttons[mode] = button
+            self._mode_buttons["page"].setChecked(True)
+            layout.addLayout(modes)
+            self._stack = QStackedWidget()
+            layout.addWidget(self._stack, 1)
+            page = QWidget()
+            outer, layout = layout, QVBoxLayout(page)
+            layout.setContentsMargins(0, 0, 0, 0)
+            layout.setSpacing(10)
+            self._stack.addWidget(page)
+            self._chat = GraceChat(window, self)
+            self._stack.addWidget(self._chat)
             self._about = label("", "about", wrap=True)
             layout.addWidget(self._about)
             self._summarize = self._action_button("spark", "Summarize this page", lambda: self.run("summarize"))
@@ -2147,8 +2477,27 @@ def main(argv=None):
                 "Made on this computer by CherryCola. Page text goes to the model as data, and Grace only writes text: "
                 "it can't click, open or run anything. A page can still try to mislead it, so check what matters.",
                 "gracenote", wrap=True))
+            _ = outer
             self.apply_theme()
             self.hide()
+
+        def set_mode(self, mode):
+            """"page": summarize, ask about or explain the current tab. "chat": Grace Chat."""
+            self._mode_buttons[mode].setChecked(True)
+            self._stack.setCurrentIndex(0 if mode == "page" else 1)
+            self.setFixedWidth(320 if mode == "page" else 380)
+            if mode == "chat":
+                self._chat.focus_input()
+
+        def chat(self, question):
+            """A question from the address bar goes to Grace Chat."""
+            self.set_mode("chat")
+            self._chat.send(question)
+
+        def remote_host(self):
+            return self._remote_host()
+
+
 
         def _action_button(self, icon_name, text, callback):
             button = QPushButton(text)
@@ -2161,10 +2510,11 @@ def main(argv=None):
 
         def apply_theme(self):
             self._spark.setPixmap(icon("spark", "accent_text").pixmap(16, 16))
+            self._chat.apply_theme()
 
         @property
         def running(self):
-            return self._process is not None or self._kind == "running"
+            return self._process is not None or self._kind == "running" or self._chat.running
 
         @property
         def status(self):
@@ -2181,6 +2531,7 @@ def main(argv=None):
 
         def close_panel(self):
             self.stop()
+            self._chat.stop()
             self.hide()
 
         # ---- what the panel offers for the current tab ----
@@ -2398,12 +2749,18 @@ def main(argv=None):
                 self._spacer.show()
             self.refresh()
 
-        def _pull(self):
-            """Downloading is the user's call: run `cherrycola pull` in their terminal, so they see the progress."""
+        def start_pull(self):
+            """Downloading is the user's call: run `cherrycola pull` in their terminal, so they see the progress.
+
+            CherryCola gets the model the way the engine picked in GraceOS Settings wants (Ollama, llama.cpp or
+            LM Studio). Returns what to tell the user.
+            """
             if shutil.which("grace-launch") and QProcess.startDetached("grace-launch", ["run", GRACE_COMMAND, "pull"])[0]:
-                self._show_message("Downloading in a terminal window. Try again when it’s done.")
-            else:
-                self._show_message("Run “cherrycola pull” in a terminal to download the model, then try again.")
+                return "Downloading in a terminal window. Try again when it’s done."
+            return "Run “cherrycola pull” in a terminal to download the model, then try again."
+
+        def _pull(self):
+            self._show_message(self.start_pull())
             self._download.hide()
 
     class CottonWindow(QMainWindow):
@@ -2999,12 +3356,12 @@ def main(argv=None):
             self._sparkle.setChecked(self._grace.isVisible())
 
         def ask_grace(self, question):
-            """A question typed in the address bar: no page text goes with it."""
+            """A question typed in the address bar goes to Grace Chat: no page text goes with it."""
             if not theme["ai"]:
                 return
             if not self._grace.isVisible():
                 self.toggle_grace()
-            self._grace.run("question", question)
+            self._grace.chat(question)
 
         def explain_error(self, tab):
             if not theme["ai"] or tab is not self._current():
@@ -3032,7 +3389,9 @@ def main(argv=None):
                 return
             process = QProcess(self)
             process.setProgram(GRACE_COMMAND)
-            process.setArguments(["ask", "-"])  # the words go on stdin, never on the command line
+            # The words go on stdin, never on the command line. --temporary: CherryCola loads the model only for
+            # this and unloads it when it's done, so Enhance doesn't keep gigabytes of RAM taken.
+            process.setArguments(enhance_arguments(cherrycola_features()))
             timer = QTimer(self)
             timer.setSingleShot(True)
             timer.timeout.connect(lambda: self._enhance_timed_out(process))

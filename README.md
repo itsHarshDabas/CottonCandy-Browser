@@ -16,6 +16,7 @@ These are the real app, captured from test runs under Xvfb.
 | ![Grace summarizing a page](docs/screenshots/grace-panel.png) | ![Grace explaining an error](docs/screenshots/grace-explain.png) |
 | ![Ask Grace from the address bar](docs/screenshots/grace-ask.png) | ![AI off: no sparkle, no chip](docs/screenshots/ai-off-newtab.png) |
 | ![Enhance search with Grace](docs/screenshots/grace-enhance.png) | ![Grace's improved search, ready for Enter](docs/screenshots/grace-enhanced.png) |
+| ![Grace Chat with web results and sources](docs/screenshots/grace-chat.png) | |
 
 The Grace answers in these screenshots come from a stand-in model server that returns canned text, not from a real model.
 
@@ -52,8 +53,10 @@ The design behind it:
   - Error pages explain what happened, for example offline, an unknown host or a bad certificate.
   - These pages run no scripts and load nothing from the network.
 - **Grace, the local AI** (only while AI is on in GraceOS Settings → AI & Models):
-  - The sparkle in the toolbar (or Ctrl+Shift+G) opens a side panel that can **summarize this page**, **answer a question about it**, or **explain an error page**. In the address bar, "Ask Grace about '…'" asks a plain question with no page attached.
-  - **Enhance search:** when you type a search (not an address), "Enhance search with Grace" rewrites it as a better search query with the local model: fixed spelling, precise names and keywords. Grace's version replaces the text in the address bar, selected, so Enter searches it, and your words as typed stay one row below. Esc stops it. Only the typed words go to the model, and nothing is searched until you press Enter.
+  - The sparkle in the toolbar (or Ctrl+Shift+G) opens a side panel that can **summarize this page**, **answer a question about it**, or **explain an error page**. In the address bar, "Ask Grace about '…'" opens the question in Grace Chat, with no page attached.
+  - **Enhance search:** when you type a search (not an address), "Enhance search with Grace" rewrites it as a better search query with the local model: fixed spelling and grammar, the right vocabulary, precise names and keywords. The model is loaded only for this and unloaded as soon as the query is ready (`cherrycola ask --temporary`), so it doesn't keep RAM taken; a model you're already chatting with stays loaded. Grace's version replaces the text in the address bar, selected, so Enter searches it, and your words as typed stay one row below. Esc stops it. Only the typed words go to the model, and nothing is searched until you press Enter.
+  - **Grace Chat:** the panel's "Chat" tab is a conversation with the local model. With **Web results** on (the switch under the chat), CherryCola searches the web for your newest message only, reads the top pages on this computer, and Grace answers with numbered sources you can click to open in a new tab. Earlier messages never leave the computer. With it off, nothing does. Replies are plain text; only the sources are links, and only http(s) ones.
+  - **Getting the model:** "Download the model" runs `cherrycola pull` in a terminal, which gets it through the engine picked in GraceOS Settings (Ollama, llama.cpp or LM Studio).
   - If Grace can't help (CherryCola not installed, the model not downloaded, the model server down or on another machine, no answer within a minute, or a reply that isn't a usable query), the dropdown says why and your words stay ready to search. Searching never waits on Grace.
   - It runs only through [CherryCola](https://github.com/itsHarshDabas/CherryCola) on this computer (`cherrycola ask -`, with Ollama, LM Studio or llama.cpp). The chip shows the model in use.
   - Nothing is read or sent until you click. The answer streams into a plain-text card with Copy and Stop.
