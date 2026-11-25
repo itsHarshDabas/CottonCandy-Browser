@@ -39,6 +39,7 @@ const UI_CALLS: &[&str] = &[
     "site_clear",
     "site_reset",
     "find",
+    "vtabs_expand",
 ];
 
 pub fn allowed(host: &str, cmd: &str) -> bool {
@@ -354,6 +355,10 @@ fn call(ui: &mut Ui, win: u32, role: Role, cmd: &str, args: &Json, from_host: &s
             Ok(json!({}))
         }
         "about" => Ok(about()),
+        "vtabs_expand" => {
+            ui.set_vtabs_expanded(win, arg_bool(args, "open"));
+            Ok(json!({}))
+        }
         "proxy_set" => crate::settings_api::proxy_set(ui, args),
         "site_shields" => site_shields(ui, win, args),
         "site_clear" => site_clear(ui, win, args),

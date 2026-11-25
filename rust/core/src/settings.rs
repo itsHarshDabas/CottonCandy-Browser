@@ -32,6 +32,8 @@ pub struct Appearance {
     pub accent: String,
     /// top or vertical (tabs down the left side)
     pub tab_layout: String,
+    /// Side tabs shrink to their icons and widen while the pointer is over them.
+    pub collapse_tabs: bool,
     /// compact, comfortable or spacious
     pub density: String,
     /// Corner roundness, 0 (square) to 16.
@@ -63,6 +65,7 @@ impl Default for Appearance {
             theme: "system".into(),
             accent: "blue".into(),
             tab_layout: "top".into(),
+            collapse_tabs: true,
             density: "comfortable".into(),
             corner_radius: 10,
             font_size: 13,

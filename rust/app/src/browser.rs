@@ -24,6 +24,8 @@ const TABROW_HEIGHT: i32 = 40;
 const TOOLBAR_HEIGHT: i32 = 46;
 const BOOKMARKS_HEIGHT: i32 = 30;
 const VTABS_WIDTH: i32 = 240;
+/// Side tabs folded to their icons.
+const VTABS_COLLAPSED: i32 = 48;
 const DARK_BG: u32 = 0xFF11_1318;
 
 /// Sizes the views ask for during layout, readable without the UI borrow.
@@ -144,6 +146,16 @@ pub struct Win {
     pub close_attempts: u32,
     pub maximized: bool,
     pub fullscreen: bool,
+    /// Folded side tabs are open while the pointer is over them.
+    pub vtabs_expanded: bool,
+}
+
+fn vtabs_width(settings: &Settings, expanded: bool) -> i32 {
+    if settings.appearance.collapse_tabs && !expanded {
+        VTABS_COLLAPSED
+    } else {
+        VTABS_WIDTH
+    }
 }
 
 pub struct Download {
@@ -487,7 +499,9 @@ pub fn open_window(private: bool, urls: Vec<String>) {
         sizes
             .chrome_height
             .store(chrome_height(&settings), Ordering::Relaxed);
-        sizes.vtabs_width.store(VTABS_WIDTH, Ordering::Relaxed);
+        sizes
+            .vtabs_width
+            .store(vtabs_width(&settings, false), Ordering::Relaxed);
         sizes.side_width.store(400, Ordering::Relaxed);
         let context = if private {
             // An empty cache path keeps everything in memory, gone when the window closes.
@@ -628,6 +642,7 @@ pub fn open_window(private: bool, urls: Vec<String>) {
             close_attempts: 0,
             maximized: false,
             fullscreen: false,
+            vtabs_expanded: false,
         });
         ui.last_focused = id;
         let urls = if urls.is_empty() {
@@ -834,6 +849,10 @@ impl Ui {
             w.sizes
                 .chrome_height
                 .store(chrome_height(&settings), Ordering::Relaxed);
+            w.sizes
+                .vtabs_width
+                .store(vtabs_width(&settings, w.vtabs_expanded), Ordering::Relaxed);
+            w.vtabs.invalidate_layout();
             w.vtabs.set_visible(
                 (settings.appearance.tab_layout == "vertical" && !w.fullscreen) as i32,
             );
@@ -841,6 +860,22 @@ impl Ui {
             w.window.layout();
         }
         self.mark_all();
+    }
+
+    /// Opens or folds the side tabs (only while they fold by themselves).
+    pub fn set_vtabs_expanded(&mut self, win: u32, open: bool) {
+        let settings = shared::settings();
+        let Some(w) = self.win(win) else { return };
+        if w.vtabs_expanded == open || !settings.appearance.collapse_tabs {
+            return;
+        }
+        w.vtabs_expanded = open;
+        w.sizes
+            .vtabs_width
+            .store(vtabs_width(&settings, open), Ordering::Relaxed);
+        w.vtabs.invalidate_layout();
+        w.window.layout();
+        self.mark(win);
     }
 
     pub fn set_fullscreen(&mut self, win: u32, on: bool) {
@@ -958,6 +993,8 @@ fn window_state(w: &Win, settings: &Settings, downloads: Json) -> Json {
         "ui": {
             "theme": resolved_theme(settings),
             "tab_layout": settings.appearance.tab_layout,
+            "tabs_collapsed": settings.appearance.collapse_tabs && !w.vtabs_expanded,
+            "collapse_tabs": settings.appearance.collapse_tabs,
             "bookmarks_bar": settings.appearance.show_bookmarks_bar,
             "home_button": settings.appearance.show_home_button,
             "controls": if frameless() { if cfg!(target_os = "macos") { "left" } else { "right" } } else { "none" },
@@ -1224,6 +1261,9 @@ pub fn apply_network_settings(context: Option<&RequestContext>) -> Option<String
         "webrtc.ip_handling_policy",
         &json!(settings.privacy.webrtc_ip_policy),
     );
+    // No preconnecting or prefetching: Chromium would open connections to hosts (ad servers among them)
+    // that Shields never sees a request for.
+    let _ = set_pref(&context, "net.network_prediction_options", &json!(2));
     let _ = set_pref(
         &context,
         "enable_do_not_track",

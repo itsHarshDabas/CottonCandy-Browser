@@ -323,6 +323,7 @@
   cc.on("state", s => {
     state = s;
     document.documentElement.dataset.theme = s.ui.theme || "dark";
+    if (vertical) document.body.classList.toggle("folded", !!s.ui.tabs_collapsed);
     renderTabs();
     renderToolbar();
   });
@@ -340,6 +341,15 @@
   if (vertical) {
     $("newtab").innerHTML = cc.icon("plus") + "<span>New tab</span>";
     $("newtab").addEventListener("click", () => call("tab_new", {}));
+    // Folded side tabs: open after the pointer rests on them a moment, fold again soon after it leaves.
+    let foldTimer = 0;
+    const want = open => {
+      clearTimeout(foldTimer);
+      if (!state || !state.ui.collapse_tabs || drag) return;
+      foldTimer = setTimeout(() => call("vtabs_expand", { open }), open ? 220 : 450);
+    };
+    document.documentElement.addEventListener("mouseenter", () => want(true));
+    document.documentElement.addEventListener("mouseleave", () => want(false));
   } else {
     initToolbar();
   }

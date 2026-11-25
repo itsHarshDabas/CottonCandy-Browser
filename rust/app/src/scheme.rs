@@ -220,6 +220,15 @@ wrap_resource_handler! {
             let host = url.host_str().unwrap_or("").to_string();
             let path = url.path().to_string();
             let method = us(&request.method());
+            // Web pages may not load anything of ours (an image of a cached favicon would tell them where
+            // you've been). Opening one of our pages as a page is fine: on_before_browse already vetted that.
+            let from_internal = self.frame_url.starts_with(&format!("{}://", cottoncandy_core::INTERNAL_SCHEME));
+            let navigation = request.resource_type() == ResourceType::MAIN_FRAME;
+            if !(from_internal || navigation) {
+                *handle_request = 1;
+                *self.reply.lock().unwrap() = Reply::not_found();
+                return 1;
+            }
             let Some(cmd) = path.strip_prefix("/api/").map(String::from) else {
                 *handle_request = 1;
                 *self.reply.lock().unwrap() = if method == "GET" {
