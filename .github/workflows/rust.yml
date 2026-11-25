@@ -65,3 +65,12 @@ jobs:
       - run: cargo clippy --all-targets -- -D warnings
       - run: cargo test
       - run: cargo build --release
+      - name: Smoke test (loads CEF and starts)
+        run: |
+          cp -r "$CEF_PATH"/. target/release/
+          if [ "$RUNNER_OS" = Linux ]; then
+            xvfb-run -a target/release/cottoncandy --version | tee /tmp/version.txt
+          else
+            target/release/cottoncandy.exe --version | tee /tmp/version.txt
+          fi
+          grep -q '^CottonCandy ' /tmp/version.txt

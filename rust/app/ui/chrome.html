@@ -1,0 +1,108 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="cc-token" content="{{TOKEN}}">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self'">
+<title>CottonCandy</title>
+<link rel="stylesheet" href="/ui/base.css">
+<link rel="stylesheet" href="/theme.css">
+<style>
+  html, body { background: var(--bg-2); overflow: hidden; user-select: none; height: 100%; }
+  body { display: flex; flex-direction: column; }
+  /* Frameless window: empty parts of the tab row move the window (-webkit-app-region). */
+  .drag { -webkit-app-region: drag; }
+  .nodrag, button, input, .tab { -webkit-app-region: no-drag; }
+  #tabrow { height: 40px; display: flex; align-items: flex-end; gap: 2px; padding: 0 8px; }
+  #tabs { display: flex; gap: 2px; min-width: 0; flex: 0 1 auto; overflow: hidden; height: 34px; align-items: flex-end; }
+  .tab { position: relative; height: 32px; min-width: 36px; width: 220px; flex: 0 1 220px; display: flex; align-items: center; gap: 8px;
+    padding: 0 8px 0 12px; border-radius: var(--radius) var(--radius) 0 0; color: var(--text-2); transition: background var(--speed), color var(--speed); }
+  .tab:hover { background: var(--hover); color: var(--text); }
+  .tab.active { background: var(--bg); color: var(--text); }
+  .tab.pinned { flex: 0 0 40px; width: 40px; padding: 0; justify-content: center; }
+  .tab .fav { width: 16px; height: 16px; flex: none; border-radius: 3px; display: grid; place-items: center; }
+  .tab .fav svg { width: 14px; height: 14px; }
+  .tab .title { flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; mask-image: linear-gradient(90deg, #000 80%, transparent); }
+  .tab .x { width: 22px; height: 22px; border-radius: 6px; border: 0; background: none; color: inherit; display: grid; place-items: center; opacity: 0; }
+  .tab:hover .x, .tab.active .x { opacity: .8; }
+  .tab .x:hover { background: var(--selected); opacity: 1; }
+  .tab .x svg, .tab .snd svg { width: 13px; height: 13px; }
+  .tab .snd { border: 0; background: none; color: var(--accent); padding: 0; display: grid; place-items: center; }
+  .tab.pinned .title, .tab.pinned .x { display: none; }
+  .spin { width: 14px; height: 14px; border-radius: 50%; border: 2px solid var(--hair); border-top-color: var(--accent); animation: spin .8s linear infinite; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  #newtab { margin-bottom: 4px; }
+  .grow { flex: 1; height: 100%; }
+  #wincontrols { display: flex; gap: 4px; align-self: center; }
+  #wincontrols .winclose:hover { background: #e81123; color: #fff; }
+  .tab img { border-radius: 3px; }
+  #wincontrols.left { order: -1; margin-right: 8px; }
+  .light { width: 13px; height: 13px; border-radius: 50%; border: 0; padding: 0; }
+  .light.close { background: #ff5f57; } .light.min { background: #febc2e; } .light.max { background: #28c840; }
+  #wincontrols:not(:hover) .light { filter: saturate(.85); }
+  #toolbar { height: 46px; display: flex; align-items: center; gap: 4px; padding: 0 8px; background: var(--bg); border-bottom: 1px solid var(--hair); }
+  #address { flex: 1; height: 34px; display: flex; align-items: center; gap: 8px; padding: 0 6px 0 10px; border-radius: calc(var(--radius) + 4px);
+    background: var(--card); border: 1px solid transparent; transition: border-color var(--speed), box-shadow var(--speed); min-width: 0; }
+  #address:focus-within { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }
+  #address .site { display: grid; place-items: center; color: var(--text-2); width: 22px; height: 22px; border-radius: 6px; border: 0; background: none; padding: 0; }
+  #address .site.secure { color: var(--ok); } #address .site.insecure { color: var(--warn); }
+  #address .site svg { width: 15px; height: 15px; }
+  #url { flex: 1; min-width: 0; border: 0; outline: 0; background: none; height: 100%; font-size: 14px; }
+  #shown { position: absolute; pointer-events: none; white-space: nowrap; overflow: hidden; font-size: 14px; }
+  .urlwrap { position: relative; flex: 1; min-width: 0; height: 100%; display: flex; align-items: center; }
+  #shown .host { color: var(--text); } #shown .rest { color: var(--text-3); }
+  #shown .warn { color: var(--warn); margin-right: 6px; }
+  .chip { height: 24px; padding: 0 9px; border-radius: 12px; display: inline-flex; align-items: center; gap: 5px; font-size: 11.5px;
+    background: var(--hover); color: var(--text-2); border: 0; }
+  .chip svg { width: 13px; height: 13px; }
+  .chip.on { background: var(--accent-soft); color: var(--accent); }
+  #shields .count { font-variant-numeric: tabular-nums; }
+  #dlring { position: relative; }
+  #dlring::after { content: ""; position: absolute; inset: 3px; border-radius: 50%; border: 2px solid transparent;
+    background: conic-gradient(var(--accent) calc(var(--p, 0) * 1%), transparent 0) border-box;
+    -webkit-mask: linear-gradient(#000 0 0) padding-box exclude, linear-gradient(#000 0 0); display: none; }
+  #dlring.active::after { display: block; }
+  #private { display: none; }
+  body.private #private { display: inline-flex; background: #5b21b6; color: #fff; }
+  body.vertical #tabs, body.vertical #newtab { display: none; }
+  body.toolbar-only #tabrow { display: none; }
+  #bookmarks { height: 30px; display: none; align-items: center; gap: 2px; padding: 0 8px; background: var(--bg); border-bottom: 1px solid var(--hair); overflow: hidden; }
+  body.bookmarks-bar #bookmarks { display: flex; }
+  #bookmarks button { height: 24px; border: 0; background: none; border-radius: 6px; padding: 0 8px; color: var(--text-2); max-width: 180px;
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  #bookmarks button:hover { background: var(--hover); color: var(--text); }
+</style>
+</head>
+<body data-role="chrome">
+<div id="tabrow" class="drag">
+  <div id="tabs" role="tablist" aria-label="Tabs"></div>
+  <button id="newtab" class="icon-btn" title="New tab (Ctrl+T)" aria-label="New tab"></button>
+  <div class="grow drag"></div>
+  <span id="private" class="chip nodrag">Private</span>
+  <div id="wincontrols" class="nodrag"></div>
+</div>
+<div id="toolbar">
+  <button class="icon-btn" id="back" title="Back (Alt+Left)" aria-label="Back"></button>
+  <button class="icon-btn" id="forward" title="Forward (Alt+Right)" aria-label="Forward"></button>
+  <button class="icon-btn" id="reload" title="Reload (Ctrl+R)" aria-label="Reload"></button>
+  <button class="icon-btn hidden" id="home" title="Home" aria-label="Home"></button>
+  <div id="address">
+    <button class="site" id="site" title="Site information" aria-label="Site information"></button>
+    <div class="urlwrap">
+      <div id="shown" aria-hidden="true"></div>
+      <input id="url" spellcheck="false" autocomplete="off" placeholder="Search or enter address" aria-label="Address and search bar">
+    </div>
+    <button class="icon-btn" id="star" title="Bookmark this page (Ctrl+D)" aria-label="Bookmark"></button>
+  </div>
+  <button class="chip" id="shields" title="Shields: ads, trackers and scripts for this site"></button>
+  <button class="chip" id="proxy" title="Proxy / VPN routing"></button>
+  <button class="icon-btn" id="ext" title="Extensions" aria-label="Extensions"></button>
+  <button class="icon-btn" id="dlring" title="Downloads" aria-label="Downloads"></button>
+  <button class="icon-btn" id="grace" title="Grace (Ctrl+Shift+G)" aria-label="Grace"></button>
+  <button class="icon-btn" id="menu" title="Menu" aria-label="Menu"></button>
+</div>
+<div id="bookmarks" aria-label="Bookmarks bar"></div>
+<script src="/ui/cc.js"></script>
+<script src="/ui/chrome.js"></script>
+</body>
+</html>

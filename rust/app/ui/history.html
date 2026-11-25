@@ -1,0 +1,21 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="cc-token" content="{{TOKEN}}">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self'">
+<title>History</title>
+<link rel="stylesheet" href="/ui/base.css">
+<link rel="stylesheet" href="/ui/page.css">
+<link rel="stylesheet" href="/theme.css">
+</head>
+<body>
+<main class="page">
+  <div class="page-head"><h1>History</h1><input id="q" class="field" type="search" placeholder="Search history" aria-label="Search history"></div>
+  <div class="toolbar"><button id="clear" class="btn danger">Clear browsing data…</button><span id="note" class="muted small"></span></div>
+  <div id="list" class="list"></div>
+</main>
+<script src="/ui/cc.js"></script>
+<script src="/ui/history.js"></script>
+</body>
+</html>

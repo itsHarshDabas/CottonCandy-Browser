@@ -1,0 +1,36 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="cc-token" content="{{TOKEN}}">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self'">
+<title>Tabs</title>
+<link rel="stylesheet" href="/ui/base.css">
+<link rel="stylesheet" href="/theme.css">
+<style>
+  html, body { height: 100%; background: var(--bg-2); overflow: hidden; user-select: none; }
+  body { display: flex; flex-direction: column; padding: 6px; gap: 4px; }
+  #tabs { flex: 1; overflow-y: auto; display: flex; flex-direction: column; gap: 2px; }
+  .tab { height: var(--row); display: flex; align-items: center; gap: 8px; padding: 0 6px 0 10px; border-radius: var(--radius); color: var(--text-2); }
+  .tab:hover { background: var(--hover); color: var(--text); }
+  .tab.active { background: var(--bg); color: var(--text); box-shadow: 0 1px 0 var(--hair); }
+  .tab .fav { width: 16px; height: 16px; flex: none; display: grid; place-items: center; }
+  .tab .fav svg { width: 14px; height: 14px; } .tab img { border-radius: 3px; }
+  .tab .title { flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .tab .x, .tab .snd { width: 22px; height: 22px; border: 0; background: none; color: inherit; border-radius: 6px; display: grid; place-items: center; padding: 0; }
+  .tab .x { opacity: 0; } .tab:hover .x, .tab.active .x { opacity: .8; } .tab .x:hover { background: var(--selected); }
+  .tab .x svg, .tab .snd svg { width: 13px; height: 13px; } .tab .snd { color: var(--accent); }
+  .tab.pinned { order: -1; }
+  .spin { width: 14px; height: 14px; border-radius: 50%; border: 2px solid var(--hair); border-top-color: var(--accent); animation: spin .8s linear infinite; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  #newtab { height: var(--row); display: flex; align-items: center; gap: 8px; padding: 0 10px; border: 0; border-radius: var(--radius); background: none; color: var(--text-2); }
+  #newtab:hover { background: var(--hover); color: var(--text); } #newtab svg { width: 15px; height: 15px; }
+</style>
+</head>
+<body data-role="vtabs">
+<button id="newtab" aria-label="New tab"></button>
+<div id="tabs" class="scroll" role="tablist" aria-label="Tabs" aria-orientation="vertical"></div>
+<script src="/ui/cc.js"></script>
+<script src="/ui/chrome.js"></script>
+</body>
+</html>

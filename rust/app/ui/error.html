@@ -1,0 +1,23 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="cc-token" content="{{TOKEN}}">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self'">
+<title>Can't open this page</title>
+<link rel="stylesheet" href="/ui/base.css">
+<link rel="stylesheet" href="/ui/page.css">
+<link rel="stylesheet" href="/theme.css">
+</head>
+<body>
+<main class="page" style="max-width:640px;padding-top:14vh">
+  <div style="font-size:40px;opacity:.6" id="ic"></div>
+  <h1 id="t" style="font-size:24px;margin:8px 0 10px">This page can't be reached</h1>
+  <p id="m" class="muted" style="line-height:1.6"></p>
+  <p class="muted small" id="code"></p>
+  <div class="toolbar" style="margin-top:22px"><button id="retry" class="btn primary">Try again</button><button id="back" class="btn">Go back</button></div>
+</main>
+<script src="/ui/cc.js"></script>
+<script src="/ui/error.js"></script>
+</body>
+</html>

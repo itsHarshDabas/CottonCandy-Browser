@@ -311,7 +311,13 @@ name = "cottoncandy"
 version = "0.1.0"
 dependencies = [
  "cef",
+ "cef-dll-sys",
  "cottoncandy-core",
+ "percent-encoding",
+ "ring",
+ "serde",
+ "serde_json",
+ "url",
 ]
 
 [[package]]
