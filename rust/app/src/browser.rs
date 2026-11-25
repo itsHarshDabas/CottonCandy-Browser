@@ -129,12 +129,14 @@ pub struct Win {
     pub sizes: Arc<Sizes>,
     pub chrome: BrowserView,
     pub chrome_browser: Option<Browser>,
-    pub vtabs: BrowserView,
+    /// Made only when the side tabs are first shown.
+    pub vtabs: Option<BrowserView>,
     pub vtabs_browser: Option<Browser>,
     pub tabs_host: Panel,
     /// The row under the toolbar: vertical tabs, the page, and Grace's side panel.
     pub body: Panel,
     pub grace: GracePanel,
+    /// Made the first time it is needed (see `ensure_popup`).
     pub popup: Option<Popup>,
     pub tabs: Vec<Tab>,
     pub active: Option<u32>,
@@ -532,6 +534,8 @@ pub fn open_window(private: bool, urls: Vec<String>) {
         })) else {
             return;
         };
+        // The toolbar's page is made now but added to the window after the first tabs, so their renderers
+        // start first: a browser starts when its view joins the window.
         let mut chrome_delegate = FixedView::new(sizes.clone(), 0);
         let Some(chrome) = create_view(
             id,
@@ -555,55 +559,15 @@ pub fn open_window(private: bool, urls: Vec<String>) {
         })) else {
             return;
         };
-        let mut vtabs_delegate = FixedView::new(sizes.clone(), 1);
-        let Some(vtabs) = create_view(
-            id,
-            Role::VTabs,
-            "cottoncandy://ui/vtabs.html",
-            context.as_ref(),
-            &mut vtabs_delegate,
-            None,
-        ) else {
-            return;
-        };
         let Some(tabs_host) = panel_create(None) else {
             return;
         };
         tabs_host.set_to_fill_layout();
         tabs_host.set_background_color(DARK_BG);
-        window.add_child_view(Some(&mut View::from(&chrome)));
         window.add_child_view(Some(&mut View::from(&body)));
         layout.set_flex_for_view(Some(&mut View::from(&body)), 1);
-        body.add_child_view(Some(&mut View::from(&vtabs)));
         body.add_child_view(Some(&mut View::from(&tabs_host)));
         body_layout.set_flex_for_view(Some(&mut View::from(&tabs_host)), 1);
-        vtabs.set_visible((settings.appearance.tab_layout == "vertical") as i32);
-
-        let mut popup_delegate = FixedView::new(sizes.clone(), 2);
-        let popup = create_view(
-            id,
-            Role::Popup,
-            "cottoncandy://ui/popup.html",
-            context.as_ref(),
-            &mut popup_delegate,
-            None,
-        )
-        .and_then(|view| {
-            let controller = window.add_overlay_view(
-                Some(&mut View::from(&view)),
-                DockingMode::from(cef_dll_sys::cef_docking_mode_t::CEF_DOCKING_MODE_CUSTOM),
-                1,
-            )?;
-            controller.set_visible(0);
-            Some(Popup {
-                controller,
-                browser: None,
-                ready: false,
-                kind: String::new(),
-                rect: rect(0, 0, 0, 0),
-                pending: None,
-            })
-        });
 
         window.set_title(Some(&cs(if private {
             "CottonCandy (Private)"
@@ -628,12 +592,12 @@ pub fn open_window(private: bool, urls: Vec<String>) {
             sizes,
             chrome,
             chrome_browser: None,
-            vtabs,
+            vtabs: None,
             vtabs_browser: None,
             tabs_host,
             body,
             grace: GracePanel::default(),
-            popup,
+            popup: None,
             tabs: Vec::new(),
             active: None,
             browsers: HashMap::new(),
@@ -654,6 +618,69 @@ pub fn open_window(private: bool, urls: Vec<String>) {
         for (i, url) in urls.into_iter().enumerate() {
             ui.new_tab(id, &url, i + 1 == count, None);
         }
+        if let Some(w) = ui.win(id) {
+            w.window
+                .add_child_view_at(Some(&mut View::from(&w.chrome)), 0);
+            if settings.appearance.tab_layout == "vertical" {
+                ensure_vtabs(w);
+            }
+            w.window.layout();
+        }
+    });
+}
+
+/// Makes the side tabs' page the first time the window needs it. Windows with tabs on top never pay for it.
+fn ensure_vtabs(w: &mut Win) {
+    if w.vtabs.is_some() {
+        return;
+    }
+    let mut delegate = FixedView::new(w.sizes.clone(), 1);
+    let Some(view) = create_view(
+        w.id,
+        Role::VTabs,
+        "cottoncandy://ui/vtabs.html",
+        w.context.as_ref(),
+        &mut delegate,
+        None,
+    ) else {
+        return;
+    };
+    w.body.add_child_view_at(Some(&mut View::from(&view)), 0);
+    w.vtabs = Some(view);
+}
+
+/// Makes the floating popup (suggestions, menus, Shields) the first time it is needed, or when the pointer
+/// first comes near the toolbar, so it is ready by the time it is asked for.
+pub fn ensure_popup(w: &mut Win) {
+    if w.popup.is_some() {
+        return;
+    }
+    let mut delegate = FixedView::new(w.sizes.clone(), 2);
+    let Some(view) = create_view(
+        w.id,
+        Role::Popup,
+        "cottoncandy://ui/popup.html",
+        w.context.as_ref(),
+        &mut delegate,
+        None,
+    ) else {
+        return;
+    };
+    let Some(controller) = w.window.add_overlay_view(
+        Some(&mut View::from(&view)),
+        DockingMode::from(cef_dll_sys::cef_docking_mode_t::CEF_DOCKING_MODE_CUSTOM),
+        1,
+    ) else {
+        return;
+    };
+    controller.set_visible(0);
+    w.popup = Some(Popup {
+        controller,
+        browser: None,
+        ready: false,
+        kind: String::new(),
+        rect: rect(0, 0, 0, 0),
+        pending: None,
     });
 }
 
@@ -845,17 +872,21 @@ impl Ui {
     /// Re-reads layout settings (bookmarks bar, tab layout) into every window.
     pub fn relayout(&mut self) {
         let settings = shared::settings();
-        for w in &self.windows {
+        for w in &mut self.windows {
             w.sizes
                 .chrome_height
                 .store(chrome_height(&settings), Ordering::Relaxed);
             w.sizes
                 .vtabs_width
                 .store(vtabs_width(&settings, w.vtabs_expanded), Ordering::Relaxed);
-            w.vtabs.invalidate_layout();
-            w.vtabs.set_visible(
-                (settings.appearance.tab_layout == "vertical" && !w.fullscreen) as i32,
-            );
+            let vertical = settings.appearance.tab_layout == "vertical";
+            if vertical {
+                ensure_vtabs(w);
+            }
+            if let Some(v) = &w.vtabs {
+                v.invalidate_layout();
+                v.set_visible((vertical && !w.fullscreen) as i32);
+            }
             w.chrome.invalidate_layout();
             w.window.layout();
         }
@@ -873,7 +904,9 @@ impl Ui {
         w.sizes
             .vtabs_width
             .store(vtabs_width(&settings, open), Ordering::Relaxed);
-        w.vtabs.invalidate_layout();
+        if let Some(v) = &w.vtabs {
+            v.invalidate_layout();
+        }
         w.window.layout();
         self.mark(win);
     }
@@ -884,8 +917,9 @@ impl Ui {
         w.fullscreen = on;
         w.window.set_fullscreen(on as i32);
         w.chrome.set_visible((!on) as i32);
-        w.vtabs
-            .set_visible((settings.appearance.tab_layout == "vertical" && !on) as i32);
+        if let Some(v) = &w.vtabs {
+            v.set_visible((settings.appearance.tab_layout == "vertical" && !on) as i32);
+        }
         if let Some(v) = &w.grace.view {
             v.set_visible((w.grace.open && !on) as i32);
         }
@@ -1067,6 +1101,7 @@ pub fn theme_css() -> String {
 
 pub fn hide_popup(ui: &mut Ui, win: u32) {
     if let Some(p) = ui.win(win).and_then(|w| w.popup.as_mut()) {
+        p.pending = None;
         if p.controller.is_visible() != 0 {
             p.controller.set_visible(0);
             p.kind.clear();
@@ -1078,6 +1113,7 @@ pub fn hide_popup(ui: &mut Ui, win: u32) {
 pub fn show_popup(ui: &mut Ui, win: u32, kind: &str, r: Rect, data: Json) {
     let Some(w) = ui.win(win) else { return };
     let bounds = w.window.bounds();
+    ensure_popup(w);
     let Some(p) = w.popup.as_mut() else { return };
     let width = r.width.clamp(120, 720);
     let height = if r.height > 0 { r.height } else { 200 }.clamp(40, 640);
@@ -1086,12 +1122,14 @@ pub fn show_popup(ui: &mut Ui, win: u32, kind: &str, r: Rect, data: Json) {
     p.kind = kind.to_string();
     p.rect = rect(x, y, width, height);
     p.controller.set_bounds(Some(&p.rect));
-    p.controller.set_visible(1);
     if let (true, Some(b)) = (p.ready, &p.browser) {
+        p.controller.set_visible(1);
         run_js(b, &emit_js("show", &data));
         p.pending = None;
     } else {
+        // A popup made just now shows once its page is ready, rather than as an empty box.
         p.pending = Some(data);
+        return;
     }
     // Suggestions keep focus in the address bar; everything else takes it.
     if kind != "suggest" {

@@ -6,6 +6,7 @@
 pub mod bookmarks_html;
 pub mod extensions;
 pub mod grace;
+pub mod import;
 pub mod omnibox;
 pub mod paths;
 pub mod settings;

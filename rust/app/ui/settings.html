@@ -38,7 +38,10 @@
   .swatches { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
   .swatch { width: 26px; height: 26px; border-radius: 50%; border: 2px solid transparent; outline: 2px solid transparent; outline-offset: 1px; padding: 0; }
   .swatch.on { outline-color: var(--text); }
-  input[type=color] { width: 30px; height: 30px; border: 0; padding: 0; background: none; }
+  /* The custom accent swatch: round like the preset ones beside it. */
+  input[type=color] { -webkit-appearance: none; appearance: none; width: 26px; height: 26px; border: 0; padding: 0; border-radius: 50%; background: none; cursor: pointer; overflow: hidden; box-shadow: 0 0 0 1px var(--hair); }
+  input[type=color]::-webkit-color-swatch-wrapper { padding: 0; }
+  input[type=color]::-webkit-color-swatch { border: 0; border-radius: 50%; }
   input[type=range] { width: 200px; accent-color: var(--accent); }
   .val { width: 46px; text-align: right; color: var(--text-2); font-variant-numeric: tabular-nums; }
   .bgs { display: grid; grid-template-columns: repeat(5, 1fr); gap: 10px; }

@@ -63,7 +63,23 @@ pub fn rebuild() {
                 *e = Arc::new(built);
             }
         }
+        release_freed_memory();
     });
+}
+
+/// Parsing the filter lists makes tens of megabytes of short-lived strings on this thread. glibc keeps
+/// what they freed in the thread's own heap, so hand it back to the system once the engine is built.
+fn release_freed_memory() {
+    #[cfg(all(target_os = "linux", target_env = "gnu"))]
+    {
+        extern "C" {
+            fn malloc_trim(pad: usize) -> std::os::raw::c_int;
+        }
+        // SAFETY: malloc_trim only returns free pages to the system; it doesn't touch live allocations.
+        unsafe {
+            malloc_trim(0);
+        }
+    }
 }
 
 /// Called once the browser is up: build from the cache now, fetch stale lists a little later.

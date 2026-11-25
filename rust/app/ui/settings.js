@@ -7,6 +7,8 @@
   let state = null;
   let about = null;   // the About page's facts, fetched once
   let message = {};   // section id -> {kind, text} shown at the top of that section
+  let sources = null; // browsers found on this computer, for importing (fetched once)
+  let importing = false;
 
   const get = path => path.split(".").reduce((o, k) => (o == null ? undefined : o[k]), state.settings);
 
@@ -157,6 +159,20 @@
           <button class="btn danger" data-ext-remove="${esc(x.id)}">Remove</button>
           <label class="switch"><input type="checkbox" data-ext="${esc(x.id)}" ${x.enabled ? "checked" : ""} aria-label="Turn ${esc(x.name)} on or off"><span></span></label></div>`).join("")}</div>` : "");
     } },
+    { id: "import", icon: "import", title: "Import from another browser", lead: "Bring your bookmarks, history, open tabs and extensions over. The other browser's files are only read, never changed.", body: () => {
+      if (!sources) return card([row(lbl("Looking for other browsers…", ""))]);
+      if (!sources.length) return card([`<div class="empty">${cc.icon("import")}No other browser found on this computer</div>`]);
+      const box = (id, label, sub, on = true) => row(`${lbl(label, sub)}<label class="switch"><input type="checkbox" id="imp-${id}" ${on ? "checked" : ""} aria-label="${esc(label)}"><span></span></label>`);
+      return card([
+        row(`${lbl("Browser", "Close it first to bring over its very latest tabs")}<select class="field" id="impFrom" aria-label="Browser to import from">${
+          sources.map((s, i) => `<option value="${i}">${esc(s.browser)}${sources.filter(o => o.browser === s.browser).length > 1 ? " · " + esc(s.name) : ""}</option>`).join("")}</select>`),
+        box("bookmarks", "Bookmarks", "Into a folder named after the browser"),
+        box("history", "History", "Up to 100,000 pages, newest first"),
+        box("tabs", "Open tabs", "Opened in a new window and kept in a bookmark folder"),
+        box("extensions", "Extensions", "Installed again from the Chrome Web Store or Firefox Add-ons", false),
+        row(`${lbl("Passwords and cookies", "These stay behind: each browser locks them with its own key")}<button class="btn primary" id="impGo" ${importing ? "disabled" : ""}>${importing ? "Importing…" : "Import"}</button>`),
+      ]);
+    } },
     { id: "bookmarks", icon: "star", title: "Bookmarks", body: () => card([
       row(`${lbl("Import bookmarks", "From a bookmarks HTML file exported by Chrome, Edge, Brave, Firefox or Safari")}<button class="btn" id="importBm">Choose file…</button>`),
       row(`${lbl("Export bookmarks", "Saves a bookmarks HTML file to your download folder")}<button class="btn" id="exportBm">Export</button>`),
@@ -255,6 +271,14 @@
     if (extUrl) extUrl.addEventListener("keydown", e => { if (e.key === "Enter") installExt(); });
     click("pickFolder", () => cc.call("pick_folder", {}));
     click("importBm", () => cc.call("bookmarks_import", {}));
+    click("impGo", async () => {
+      const s = sources[+$("impFrom").value];
+      const args = { key: s.key };
+      for (const k of ["bookmarks", "history", "tabs", "extensions"]) args[k] = $("imp-" + k).checked;
+      importing = true;
+      try { await cc.call("import_run", args); flash("import", "info", `Reading ${s.browser}…`); }
+      catch (e) { importing = false; flash("import", "err", e.message); }
+    });
     click("exportBm", async () => {
       try { const r = await cc.call("bookmarks_export", {}); flash("bookmarks", "ok", `Exported ${r.count} bookmark${r.count === 1 ? "" : "s"} to ${r.path}`); }
       catch (e) { flash("bookmarks", "err", e.message); }
@@ -276,6 +300,14 @@
   });
   cc.on("import", r => flash("bookmarks", r.error ? "err" : "ok", r.error || `Imported ${r.count} bookmark${r.count === 1 ? "" : "s"}.`));
   cc.on("folder", r => set("downloads.folder", r.folder));
+  cc.on("import_done", r => {
+    importing = false;
+    const n = (k, one, many) => r[k] != null ? `${r[k].toLocaleString()} ${r[k] === 1 ? one : many}` : null;
+    const parts = [n("bookmarks", "bookmark", "bookmarks"), n("history", "page of history", "pages of history"), n("tabs", "open tab", "open tabs")].filter(Boolean);
+    if (r.extensions && r.extensions.length) parts.push(`${r.extensions.length} extension${r.extensions.length === 1 ? "" : "s"} (installing: ${r.extensions.join(", ")})`);
+    const text = parts.length ? `From ${r.from}: ${parts.join(", ")}.` : `Nothing to bring over from ${r.from}.`;
+    flash("import", r.errors.length ? "err" : "ok", text + (r.errors.length ? " " + r.errors.join(" ") : ""));
+  });
 
   $("clearCancel").addEventListener("click", () => $("clear").close());
   $("clearGo").addEventListener("click", async () => {
@@ -305,5 +337,6 @@
     [state, about] = await Promise.all([cc.call("settings_get", {}), cc.call("about", {}).catch(() => null)]);
     render();
     jump();
+    cc.call("import_sources", {}).then(r => { sources = r.sources; }).catch(() => { sources = []; }).finally(render);
   })();
 })();

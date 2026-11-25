@@ -6,7 +6,7 @@ use crate::cefx::*;
 use crate::shared;
 use cef::*;
 use cottoncandy_core::settings::{self as cs_settings, Settings};
-use cottoncandy_core::{bookmarks_html, extensions as ext};
+use cottoncandy_core::{bookmarks_html, extensions as ext, import};
 use serde_json::{json, Value as Json};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
@@ -53,6 +53,32 @@ pub fn call(ui: &mut Ui, browser_id: i32, cmd: &str, args: &Json) -> Res {
                 Ok(s)
             })?;
             Ok(snapshot())
+        }
+        "import_sources" => Ok(json!({
+            "sources": import::detect(&import::Roots::here()).iter().map(|p| json!({
+                "key": p.dir.to_string_lossy(),
+                "browser": p.browser,
+                "name": p.name,
+                "firefox": p.kind == import::Kind::Firefox,
+            })).collect::<Vec<_>>()
+        })),
+        "import_run" => {
+            // Only a profile that detection finds again can be read: the page names one, it can't point
+            // anywhere else on disk.
+            let key = arg_str(args, "key");
+            let profile = import::detect(&import::Roots::here())
+                .into_iter()
+                .find(|p| p.dir.to_string_lossy() == key)
+                .ok_or("That browser profile is gone.")?;
+            let want = |k: &str| args.get(k).and_then(Json::as_bool).unwrap_or(false);
+            let what = ImportWhat {
+                bookmarks: want("bookmarks"),
+                history: want("history"),
+                tabs: want("tabs"),
+                extensions: want("extensions"),
+            };
+            std::thread::spawn(move || run_import(browser_id, profile, what));
+            Ok(json!({ "started": true }))
         }
         "ext_install" => {
             let source = ext::parse_store_url(arg_str(args, "url")).map_err(|e| e.to_string())?;
@@ -379,6 +405,121 @@ wrap_run_file_dialog_callback! {
             run_js(&self.browser, &emit_js(self.purpose, &reply));
         }
     }
+}
+
+struct ImportWhat {
+    bookmarks: bool,
+    history: bool,
+    tabs: bool,
+    extensions: bool,
+}
+
+/// Reads what was asked for from another browser's profile (on a worker thread), stores it, opens the
+/// tabs in a new window and starts installing the extensions, then tells the page what came over.
+fn run_import(browser_id: i32, profile: import::Profile, what: ImportWhat) {
+    let scratch = shared::get().cache_dir.join("import");
+    let now = now();
+    let mut done = serde_json::Map::new();
+    let mut errors: Vec<String> = Vec::new();
+    let label = format!("{} ({})", profile.browser, profile.name);
+    if what.bookmarks {
+        match import::bookmarks(&profile, &scratch) {
+            Ok(items) => {
+                let folder_root = format!("Imported from {}", profile.browser);
+                let n = shared::with_store(|s| {
+                    items
+                        .iter()
+                        .filter(|b| {
+                            let folder = format!("{folder_root}/{}", b.folder);
+                            s.add_bookmark(&b.url, &b.title, &folder, now)
+                                .unwrap_or(false)
+                        })
+                        .count()
+                })
+                .unwrap_or(0);
+                done.insert("bookmarks".into(), json!(n));
+            }
+            Err(e) => errors.push(format!("Bookmarks: {e}")),
+        }
+    }
+    let mut titles = std::collections::HashMap::new();
+    if what.history {
+        match import::history(&profile, &scratch) {
+            Ok(visits) => {
+                titles.extend(visits.iter().map(|v| (v.url.clone(), v.title.clone())));
+                let n = shared::with_store(|s| s.import_visits(&visits))
+                    .transpose()
+                    .map_err(|e| e.to_string());
+                match n {
+                    Ok(n) => {
+                        done.insert("history".into(), json!(n.unwrap_or(0)));
+                    }
+                    Err(e) => errors.push(format!("History: {e}")),
+                }
+            }
+            Err(e) => errors.push(format!("History: {e}")),
+        }
+    }
+    let mut urls = Vec::new();
+    if what.tabs {
+        match import::tabs(&profile) {
+            Ok(tabs) => {
+                // A session file often has no titles yet; the other browser's history does.
+                if titles.is_empty() && tabs.iter().any(|t| t.title.is_empty()) {
+                    if let Ok(visits) = import::history(&profile, &scratch) {
+                        titles.extend(visits.into_iter().map(|v| (v.url, v.title)));
+                    }
+                }
+                let folder = format!("Imported from {}/Open tabs", profile.browser);
+                shared::with_store(|s| {
+                    for t in &tabs {
+                        let title = if t.title.is_empty() {
+                            titles.get(&t.url).map(String::as_str).unwrap_or("")
+                        } else {
+                            &t.title
+                        };
+                        let _ = s.add_bookmark(&t.url, title, &folder, now);
+                    }
+                });
+                urls = tabs.into_iter().map(|t| t.url).collect();
+                done.insert("tabs".into(), json!(urls.len()));
+            }
+            Err(e) => errors.push(format!("Open tabs: {e}")),
+        }
+    }
+    let extensions = if what.extensions {
+        import::extensions(&profile)
+    } else {
+        Vec::new()
+    };
+    if what.extensions {
+        done.insert(
+            "extensions".into(),
+            json!(extensions
+                .iter()
+                .map(|e| e.name.clone())
+                .collect::<Vec<_>>()),
+        );
+    }
+    done.insert("from".into(), json!(label));
+    done.insert("errors".into(), json!(errors));
+    if !urls.is_empty() {
+        on_ui(move || browser::open_window(false, urls));
+    }
+    browser::later(move |ui| {
+        for e in extensions {
+            install_extension(
+                browser_id,
+                match e.kind {
+                    import::Kind::Chromium => ext::Source::Chrome(e.id),
+                    import::Kind::Firefox => ext::Source::Firefox(e.id),
+                },
+            );
+        }
+        if let Some(b) = page_browser(ui, browser_id) {
+            run_js(&b, &emit_js("import_done", &Json::Object(done)));
+        }
+    });
 }
 
 fn import_bookmarks(path: &str) -> Json {

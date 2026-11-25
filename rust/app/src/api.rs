@@ -40,6 +40,7 @@ const UI_CALLS: &[&str] = &[
     "site_reset",
     "find",
     "vtabs_expand",
+    "popup_warm",
 ];
 
 pub fn allowed(host: &str, cmd: &str) -> bool {
@@ -61,6 +62,8 @@ pub fn allowed(host: &str, cmd: &str) -> bool {
             "ext_install",
             "ext_toggle",
             "ext_remove",
+            "import_sources",
+            "import_run",
             "bookmarks_import",
             "bookmarks_export",
             "pick_folder",
@@ -134,7 +137,7 @@ fn call(ui: &mut Ui, win: u32, role: Role, cmd: &str, args: &Json, from_host: &s
                         b(w.window.bounds()),
                         b(w.chrome.bounds()),
                         b(w.tabs_host.bounds()),
-                        b(w.vtabs.bounds()),
+                        w.vtabs.as_ref().map(|v| b(v.bounds())).unwrap_or_default(),
                         w.tabs_host.child_view_count()
                     );
                 }
@@ -143,7 +146,13 @@ fn call(ui: &mut Ui, win: u32, role: Role, cmd: &str, args: &Json, from_host: &s
                 if let Some(p) = ui.win(win).and_then(|w| w.popup.as_mut()) {
                     p.ready = true;
                     if let (Some(data), Some(b)) = (p.pending.take(), &p.browser) {
+                        p.controller.set_visible(1);
                         run_js(b, &emit_js("show", &data));
+                        if p.kind != "suggest" {
+                            if let Some(view) = p.controller.contents_view() {
+                                view.request_focus();
+                            }
+                        }
                     }
                 }
             }
@@ -355,6 +364,12 @@ fn call(ui: &mut Ui, win: u32, role: Role, cmd: &str, args: &Json, from_host: &s
             Ok(json!({}))
         }
         "about" => Ok(about()),
+        "popup_warm" => {
+            if let Some(w) = ui.win(win) {
+                browser::ensure_popup(w);
+            }
+            Ok(json!({}))
+        }
         "vtabs_expand" => {
             ui.set_vtabs_expanded(win, arg_bool(args, "open"));
             Ok(json!({}))

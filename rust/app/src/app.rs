@@ -6,12 +6,14 @@ use cef::*;
 use cef_dll_sys::cef_scheme_options_t as opt;
 
 /// Chromium features CottonCandy turns off: they phone home, show Google services we don't ship, or cost
-/// memory for something the browser doesn't use.
+/// memory for something the browser doesn't use. The spare renderer is an idle process Chromium keeps
+/// ready for the next site; on Linux a new one starts from the zygote in a few milliseconds anyway.
 const DISABLED_FEATURES: &str =
     "Translate,MediaRouter,DialMediaRouteProvider,OptimizationHints,OptimizationHintsFetching,\
 OptimizationGuideModelDownloading,InterestFeedContentSuggestions,PrivacySandboxSettings4,FedCm,\
 AutofillServerCommunication,CertificateTransparencyComponentUpdater,UseChromeOSDirectVideoDecoder,\
-HeavyAdPrivacyMitigations,SubresourceFilter,NetworkTimeServiceQuerying,TabHoverCardImages";
+HeavyAdPrivacyMitigations,SubresourceFilter,NetworkTimeServiceQuerying,TabHoverCardImages,\
+SpareRendererForSitePerProcess";
 
 wrap_app! {
     pub struct CcApp {}

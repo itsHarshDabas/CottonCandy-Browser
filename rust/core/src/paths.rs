@@ -8,7 +8,7 @@ fn env_dir(name: &str) -> Option<PathBuf> {
         .map(PathBuf::from)
 }
 
-fn home() -> PathBuf {
+pub fn home() -> PathBuf {
     env_dir("HOME")
         .or_else(|| env_dir("USERPROFILE"))
         .unwrap_or_else(|| PathBuf::from("."))

@@ -90,6 +90,21 @@ browser through `cottoncandy://<page>/api/<call>`.
 - **Firefox add-ons.** These come from addons.mozilla.org over https and are converted (best effort) to
   Chromium's format.
 
+### Importing from other browsers
+
+`core/src/import.rs` reads other browsers' profiles.
+
+- **Only found profiles.** The Settings page names a profile by its folder, and the browser accepts it only if
+  its own detection finds that folder again, so a page can't make it read anywhere else.
+- **Read-only copies.** Databases are copied to a private scratch folder and opened there. The other
+  browser's files are never written or locked. The copies are deleted afterwards.
+- **Bounded.** Files over 64 MB are skipped. Imports are capped: 100,000 history entries, 500 tabs and
+  50,000 bookmarks. Only `http(s)` addresses come over.
+- **Untrusted input.** Session files are parsed with bounds checks, and Firefox's LZ4 decoder refuses
+  back-references outside its output. Tests cover truncated and hostile input.
+- **Extensions** are installed through the normal store path, so the usual signature and manifest checks apply.
+- **No passwords or cookies.** These are not imported.
+
 ### Network settings
 
 - **Proxy and DNS.** Proxy, PAC and secure DNS settings are checked before use: a valid host and port, a PAC
