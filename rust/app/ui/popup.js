@@ -120,7 +120,7 @@
       box.innerHTML = `<div class="head">${cc.icon("puzzle")}<h2>Extensions</h2></div>` + (items.length ? items.map(x => `
         <div class="item" data-id="${esc(x.id)}"><span class="t">${esc(x.name)}</span><span class="k">${x.enabled ? "On" : "Off"}</span></div>`).join("")
         : '<div class="empty">Add extensions from the Chrome Web Store or Firefox Add-ons</div>') +
-        '<div class="foot"><button class="btn" data-open="cottoncandy://extensions/">Manage extensions</button></div>';
+        '<div class="foot"><button class="btn" data-open="cottoncandy://settings/#extensions">Manage extensions</button></div>';
       box.querySelectorAll(".item").forEach(el => el.addEventListener("click", () => { hide(); call("command", { id: "open_extensions" }); }));
     },
     site(d) {

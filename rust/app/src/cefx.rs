@@ -49,6 +49,13 @@ pub fn on_ui(job: impl FnOnce() + Send + 'static) {
     post(cef_dll_sys::cef_thread_id_t::TID_UI, 0, Box::new(job));
 }
 
+/// Closes a window from a posted task. Closing asks `can_close`, which needs the UI state, so it can't run
+/// while a caller is still holding that state.
+pub fn close_window(window: &Window) {
+    let window = window.clone();
+    on_ui(move || window.close());
+}
+
 /// Runs `job` on the UI thread in `ms` milliseconds.
 pub fn on_ui_later(ms: i64, job: impl FnOnce() + Send + 'static) {
     post(cef_dll_sys::cef_thread_id_t::TID_UI, ms, Box::new(job));
@@ -120,7 +127,7 @@ pub fn to_value(json: &serde_json::Value) -> Option<Value> {
 
 /// Sets a Chromium preference on a request context, and says why it failed.
 pub fn set_pref(
-    context: &RequestContext,
+    context: &impl ImplPreferenceManager,
     name: &str,
     json: &serde_json::Value,
 ) -> Result<(), String> {
@@ -129,9 +136,17 @@ pub fn set_pref(
         return Err(format!("{name} can't be changed"));
     }
     let mut value = to_value(json).ok_or("bad value")?;
-    let mut error = CefString::default();
-    if context.set_preference(Some(&name), Some(&mut value), Some(&mut error)) == 0 {
-        return Err(error.to_string());
+    // CEF refuses the call outright if the error string is null, which an empty CefString would be.
+    let mut error = cs(" ");
+    let ok = context.set_preference(Some(&name), Some(&mut value), Some(&mut error)) != 0;
+    if std::env::var_os("CC_DEBUG").is_some() {
+        eprintln!(
+            "[pref] {name} = {json} -> {ok} (valid={})",
+            value.is_valid()
+        );
+    }
+    if !ok {
+        return Err(format!("{name} wasn't accepted"));
     }
     Ok(())
 }

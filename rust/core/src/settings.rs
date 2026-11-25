@@ -44,6 +44,8 @@ pub struct Appearance {
     pub show_home_button: bool,
     /// Glassy translucent toolbar and panels.
     pub translucency: bool,
+    /// Darken websites that have no dark theme of their own (Chromium's auto dark mode; needs a restart).
+    pub dark_web_pages: bool,
     /// Animations and transitions.
     pub motion: bool,
     /// gradient, aurora, mesh, plain, or image (with `wallpaper_path`)
@@ -68,6 +70,7 @@ impl Default for Appearance {
             show_bookmarks_bar: false,
             show_home_button: false,
             translucency: true,
+            dark_web_pages: false,
             motion: true,
             newtab_background: "aurora".into(),
             wallpaper_path: String::new(),
