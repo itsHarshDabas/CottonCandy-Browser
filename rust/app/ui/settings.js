@@ -47,6 +47,7 @@
           `<button class="swatch ${s.accent === a.id ? "on" : ""}" style="background:${a.color}" data-path="appearance.accent" data-v="${a.id}" aria-label="${a.id}" title="${a.id}"></button>`).join("")}
           <input type="color" data-path="appearance.accent" value="${custom ? esc(s.accent) : "#ff6ec7"}" aria-label="Custom accent color" title="Custom color"></div>`),
         seg("appearance.tab_layout", "Tabs", "", [["top", "Across the top"], ["vertical", "Down the side"]]),
+        sw("appearance.collapse_tabs", "Fold side tabs", "Side tabs shrink to their icons and open while you point at them"),
         seg("appearance.density", "Density", "", [["compact", "Compact"], ["comfortable", "Comfortable"], ["spacious", "Spacious"]]),
         range("appearance.corner_radius", "Corner roundness", "", 0, 16, "px"),
         range("appearance.font_size", "Text size", "For CottonCandy's own toolbar and pages", 11, 18, "px"),
