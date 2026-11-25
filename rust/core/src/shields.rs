@@ -97,7 +97,28 @@ pub fn looks_like_filter_list(text: &str) -> bool {
 pub struct Shields {
     ads: Engine,
     trackers: Engine,
+    /// Generic element-hiding rules (`##.ad-slot`, `###banner`): plain class and id selectors that apply on
+    /// every site. The engine only gives these out for the classes and ids a page reports, which needs a
+    /// script running in the page; plain class and id selectors are cheap for Chromium to match, so they
+    /// go into the page's style sheet directly.
+    generic_hide: Vec<String>,
     pub rule_count: usize,
+}
+
+/// A generic hiding rule's selector, if it is a plain `.class` or `#id` (always valid CSS).
+fn generic_selector(line: &str) -> Option<&str> {
+    let sel = line.trim().strip_prefix("##")?;
+    let mut chars = sel.chars();
+    let first = chars.next()?;
+    let rest = chars.as_str();
+    let rest = rest.strip_prefix('-').unwrap_or(rest);
+    let mut rest_chars = rest.chars();
+    let ok = matches!(first, '.' | '#')
+        && rest_chars
+            .next()
+            .is_some_and(|c| c.is_ascii_alphabetic() || c == '_')
+        && rest_chars.all(|c| c.is_ascii_alphanumeric() || c == '_' || c == '-');
+    ok.then_some(sel)
 }
 
 /// What the filters say about one request.
@@ -117,7 +138,16 @@ impl Shields {
         let mut ads = FilterSet::new(false);
         let mut trackers = FilterSet::new(false);
         let mut count = 0;
+        let mut generic = std::collections::BTreeSet::new();
+        let mut generic_exceptions = std::collections::HashSet::new();
         let mut add = |set: &mut FilterSet, text: String| {
+            for line in text.lines() {
+                if let Some(sel) = generic_selector(line) {
+                    generic.insert(sel.to_string());
+                } else if let Some(sel) = line.trim().strip_prefix("#@#") {
+                    generic_exceptions.insert(sel.to_string());
+                }
+            }
             count += text
                 .lines()
                 .filter(|l| {
@@ -146,9 +176,14 @@ impl Shields {
         if !custom_rules.trim().is_empty() {
             add(&mut ads, custom_rules.to_string());
         }
+        let generic_hide = generic
+            .into_iter()
+            .filter(|s| !generic_exceptions.contains(s))
+            .collect();
         Shields {
             ads: Engine::new_with_filter_set(ads),
             trackers: Engine::new_with_filter_set(trackers),
+            generic_hide,
             rule_count: count,
         }
     }
@@ -199,6 +234,14 @@ impl Shields {
             .collect();
         selectors.sort();
         selectors.truncate(4000);
+        // Generic rules, unless the site is excepted from them ($generichide) or from one of them.
+        if !resources.generichide {
+            selectors.extend(
+                self.generic_hide
+                    .iter()
+                    .filter(|s| !resources.exceptions.contains(*s)),
+            );
+        }
         if selectors.is_empty() {
             return String::new();
         }
@@ -362,7 +405,7 @@ mod tests {
         std::fs::create_dir_all(path.parent().unwrap()).unwrap();
         std::fs::write(
             &path,
-            "! Title: test\n||ads.example^\nexample.org##.banner-ad\n",
+            "! Title: test\n||ads.example^\nexample.org##.banner-ad\n##.adsbygoogle\n###sponsored-box\n##div > .x\n##.1bad\n##.not-an-ad\n#@#.not-an-ad\nallowed.test#@#.adsbygoogle\n",
         )
         .unwrap();
         let s = Shields::build(dir.path(), &["easylist".into()], "||mine.test^$script");
@@ -389,6 +432,20 @@ mod tests {
         assert!(s
             .cosmetic_css("https://example.org/")
             .contains(".banner-ad"));
+        // Generic rules hide on every site, except where a site is excepted.
+        let css = s.cosmetic_css("https://news.test/");
+        assert!(css.contains(".adsbygoogle"), "{css}");
+        assert!(css.contains("#sponsored-box"));
+        assert!(!css.contains(".banner-ad"));
+        // Other generic selectors come from the engine itself.
+        assert!(css.contains("div > .x"));
+        assert!(!css.contains(".1bad"), "not valid CSS, so not used");
+        assert!(!s
+            .cosmetic_css("https://allowed.test/")
+            .contains(".adsbygoogle"));
+        assert!(!s
+            .cosmetic_css("https://anywhere.test/")
+            .contains(".not-an-ad"));
         // Turned off: not used.
         let s = Shields::build(dir.path(), &[], "");
         assert_eq!(
