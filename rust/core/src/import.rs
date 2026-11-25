@@ -309,7 +309,7 @@ pub fn bookmarks(p: &Profile, scratch: &Path) -> Result<Vec<Imported>, String> {
         }
         Kind::Firefox => {
             let db = copy_db(&p.dir.join("places.sqlite"), scratch)?;
-            firefox_bookmarks(&db.conn).map_err(|e| e.to_string())
+            firefox_bookmarks(db.conn()).map_err(|e| e.to_string())
         }
     }
 }
@@ -438,7 +438,7 @@ pub fn history(p: &Profile, scratch: &Path) -> Result<Vec<Visit>, String> {
         ),
     };
     let db = copy_db(&p.dir.join(file), scratch)?;
-    let mut stmt = db.conn.prepare(sql).map_err(|e| e.to_string())?;
+    let mut stmt = db.conn().prepare(sql).map_err(|e| e.to_string())?;
     let rows = stmt
         .query_map([MAX_HISTORY as i64], |r| {
             Ok(Visit {
@@ -454,12 +454,20 @@ pub fn history(p: &Profile, scratch: &Path) -> Result<Vec<Visit>, String> {
 
 /// A private copy of a browser's database (and its write-ahead log), removed when dropped.
 struct CopiedDb {
-    conn: rusqlite::Connection,
+    conn: Option<rusqlite::Connection>,
     files: Vec<PathBuf>,
+}
+
+impl CopiedDb {
+    fn conn(&self) -> &rusqlite::Connection {
+        self.conn.as_ref().expect("open until dropped")
+    }
 }
 
 impl Drop for CopiedDb {
     fn drop(&mut self) {
+        // Close the database first: Windows can't delete a file that is still open.
+        drop(self.conn.take());
         for f in &self.files {
             let _ = std::fs::remove_file(f);
         }
@@ -491,7 +499,10 @@ fn copy_db(src: &Path, scratch: &Path) -> Result<CopiedDb, String> {
     }
     files.push(PathBuf::from(format!("{}-shm", dest.display())));
     let conn = rusqlite::Connection::open(&dest).map_err(|e| e.to_string())?;
-    Ok(CopiedDb { conn, files })
+    Ok(CopiedDb {
+        conn: Some(conn),
+        files,
+    })
 }
 
 // ---- open tabs ------------------------------------------------------------------------------------
