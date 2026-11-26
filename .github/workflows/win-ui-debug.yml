@@ -59,9 +59,13 @@ jobs:
           Add-Type -AssemblyName System.Windows.Forms
           function Send-Text([string]$t) { foreach ($c in $t.ToCharArray()) { [System.Windows.Forms.SendKeys]::SendWait("$c"); Start-Sleep -Milliseconds 120 } ; Start-Sleep 2 }
           function Send-Key([string]$k) { [System.Windows.Forms.SendKeys]::SendWait($k); Start-Sleep 1 }
+          ./tools/win-debug/focus.ps1 before-click
+          # Bring the window to the front by clicking an empty part of the tab row, as a person would.
+          ./tools/win-debug/click-type.ps1 -X 700 -Y 18 -Text ""
+          ./tools/win-debug/focus.ps1 after-click
           "== 1. type at startup (the new tab's search box has focus)"; Send-Text "hello"; node tools/win-debug/values.js
           ./tools/win-debug/shot.ps1 -Path out\3-typed-at-startup.png
-          "== 2. Esc, Ctrl+L, type"; Send-Key "{ESC}"; Send-Key "^l"; Send-Text "example"; node tools/win-debug/values.js
+          "== 2. Esc, Ctrl+L, type"; Send-Key "{ESC}"; Send-Key "^l"; Send-Text "example"; node tools/win-debug/values.js; ./tools/win-debug/focus.ps1 step2
           "== 3. Esc, Ctrl+F, type in the find bar"; Send-Key "{ESC}"; Send-Key "^f"; Send-Text "duck"; node tools/win-debug/values.js
           ./tools/win-debug/shot.ps1 -Path out\4-find.png
           "== 4. Esc, Ctrl+L, type"; Send-Key "{ESC}"; Send-Key "^l"; Send-Text "abc"; node tools/win-debug/values.js
