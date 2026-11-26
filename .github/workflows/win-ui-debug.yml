@@ -1,0 +1,59 @@
+name: win-ui-debug
+# Temporary: runs the published Windows build on a Windows machine and records what its window shows.
+on:
+  push:
+    branches: [debug/windows-ui]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Release to test, or empty to build this branch
+        default: v1.0-beta
+permissions:
+  contents: read
+jobs:
+  probe:
+    runs-on: windows-2025
+    defaults:
+      run:
+        shell: pwsh
+    steps:
+      - uses: actions/checkout@v4
+      - name: Get the build
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $tag = "${{ inputs.tag }}"; if (-not $tag) { $tag = "v1.0-beta" }
+          gh release download $tag -R $env:GITHUB_REPOSITORY -p "*windows-x86_64.zip" -D dl
+          Expand-Archive (Get-ChildItem dl\*.zip).FullName -DestinationPath app
+          $exe = (Get-ChildItem app -Recurse -Filter cottoncandy.exe | Select-Object -First 1).FullName
+          "EXE=$exe" >> $env:GITHUB_ENV
+          New-Item -ItemType Directory out | Out-Null
+          Get-CimInstance Win32_VideoController | Format-List Name, DriverVersion, CurrentHorizontalResolution, CurrentVerticalResolution
+      - name: Run it and look
+        run: |
+          cd tools/win-debug; npm i --silent playwright-core@1.49.1; cd ../..
+          $env:CC_DEBUG = "1"; $env:CC_DEBUG_PORT = "9222"
+          $p = Start-Process $env:EXE -PassThru -RedirectStandardOutput out\stdout.txt -RedirectStandardError out\stderr.txt
+          Start-Sleep 20
+          ./tools/win-debug/shot.ps1 -Path out\1-started.png
+          node tools/win-debug/probe.js out
+          ./tools/win-debug/shot.ps1 -Path out\2-after-probe.png
+          # Real mouse and keyboard: click the middle of the window (the new tab's search box) and type.
+          Add-Type -AssemblyName System.Windows.Forms
+          $b = [System.Windows.Forms.Screen]::PrimaryScreen.Bounds
+          ./tools/win-debug/click-type.ps1 -X ([int]($b.Width/2)) -Y ([int]($b.Height/2)) -Text "hello typed"
+          Start-Sleep 2
+          ./tools/win-debug/shot.ps1 -Path out\3-typed-in-page.png
+          ./tools/win-debug/click-type.ps1 -X 400 -Y 62 -Text "address typed"
+          Start-Sleep 2
+          ./tools/win-debug/shot.ps1 -Path out\4-typed-in-toolbar.png
+          Get-Process cottoncandy -ErrorAction SilentlyContinue | Format-Table Id, Responding, MainWindowTitle, CPU
+          Stop-Process -Id $p.Id -Force -ErrorAction SilentlyContinue
+          Start-Sleep 2
+          Get-ChildItem $env:LOCALAPPDATA, $env:APPDATA -Recurse -Filter cef.log -ErrorAction SilentlyContinue | ForEach-Object { Copy-Item $_.FullName out\; "== $($_.FullName)"; Get-Content $_.FullName -Tail 200 }
+          Get-Content out\stdout.txt, out\stderr.txt -ErrorAction SilentlyContinue | Select-Object -Last 200
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: win-ui-debug
+          path: out
