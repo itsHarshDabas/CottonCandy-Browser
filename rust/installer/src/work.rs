@@ -359,7 +359,15 @@ pub fn uninstall(dir: &Path, remove_data: bool, progress: &Shared) -> Result<(),
     }
     crate::platform::unregister(&manifest);
     let _ = fs::remove_file(dir.join(MANIFEST));
-    let _ = fs::remove_file(dir.join(UNINSTALL_EXE));
+    // The uninstall.exe that handed over to its temporary copy may still be exiting, and Windows
+    // keeps a running program's file locked: try for a while.
+    let uninstaller = dir.join(UNINSTALL_EXE);
+    for _ in 0..40 {
+        if fs::remove_file(&uninstaller).is_ok() || !uninstaller.exists() {
+            break;
+        }
+        std::thread::sleep(std::time::Duration::from_millis(250));
+    }
     let _ = fs::remove_dir(dir);
     if remove_data {
         let data = crate::platform::data_dir();
