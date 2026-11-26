@@ -522,12 +522,20 @@ wrap_request_handler! {
             &self,
             _browser: Option<&mut Browser>,
             _frame: Option<&mut Frame>,
-            _request: Option<&mut Request>,
-            _is_navigation: ::std::os::raw::c_int,
+            request: Option<&mut Request>,
+            is_navigation: ::std::os::raw::c_int,
             _is_download: ::std::os::raw::c_int,
-            _request_initiator: Option<&CefString>,
+            request_initiator: Option<&CefString>,
             _disable_default_handling: Option<&mut ::std::os::raw::c_int>,
         ) -> Option<ResourceRequestHandler> {
+            // Opening one of our pages goes through the scheme's factory; the files and calls it makes come here.
+            let internal = (is_navigation == 0)
+                .then_some(())
+                .and(request)
+                .and_then(|r| crate::scheme::internal_requests(r, &os(request_initiator)));
+            if let Some(internal) = internal {
+                return Some(internal);
+            }
             // Only web pages in tabs go past Shields; the toolbar and popups load nothing from the web.
             let tab = self.ctx.tab.clone()?;
             Some(crate::shields::TabRequests::new(self.ctx.win, tab))

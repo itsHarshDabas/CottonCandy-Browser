@@ -55,11 +55,11 @@ jobs:
           # Real mouse and keyboard: click the middle of the window (the new tab's search box) and type.
           Add-Type -AssemblyName System.Windows.Forms
           $b = [System.Windows.Forms.Screen]::PrimaryScreen.Bounds
-          ./tools/win-debug/click-type.ps1 -X ([int]($b.Width/2)) -Y ([int]($b.Height/2)) -Text "hello typed"
+          Add-Type -AssemblyName System.Windows.Forms; [System.Windows.Forms.SendKeys]::SendWait("hello typed")
           Start-Sleep 2
           node tools/win-debug/values.js
           ./tools/win-debug/shot.ps1 -Path out\3-typed-in-page.png
-          ./tools/win-debug/click-type.ps1 -X 400 -Y 62 -Text "address typed"
+          [System.Windows.Forms.SendKeys]::SendWait("{ESC}^l"); Start-Sleep 1; [System.Windows.Forms.SendKeys]::SendWait("example.org")
           Start-Sleep 2
           node tools/win-debug/values.js
           ./tools/win-debug/shot.ps1 -Path out\4-typed-in-toolbar.png
