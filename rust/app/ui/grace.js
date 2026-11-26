@@ -89,6 +89,46 @@
   $("chatStop").addEventListener("click", () => cc.call("grace_stop", { slot: "chat" }));
   $("newChat").addEventListener("click", () => { if (busy.chat) cc.call("grace_stop", { slot: "chat" }); history = []; drawChat(); $("input").focus(); });
 
+  // ---- Setting up: install CherryColaLLM, pick a model ----
+  let justInstalled = false;
+  function drawSetup(installing, error) {
+    const box = $("setup"), go = $("setupGo");
+    const missing = !status.installed;
+    const noModel = status.installed && (justInstalled || (status.message && /model|pull|download/i.test(status.message)));
+    box.classList.toggle("hidden", !missing && !noModel && !installing);
+    $("setupModels").classList.toggle("hidden", missing || !!installing);
+    go.classList.toggle("hidden", !missing || !!installing);
+    $("setupBar").classList.toggle("hidden", !installing);
+    if (installing) {
+      $("setupTitle").textContent = "Installing CherryColaLLM";
+      $("setupText").textContent = installing.step || "";
+      $("setupBar").classList.toggle("busy", installing.percent == null);
+      $("setupBar").firstElementChild.style.width = installing.percent != null ? Math.max(2, installing.percent) + "%" : "";
+    } else if (missing) {
+      $("setupTitle").textContent = "Grace needs CherryColaLLM";
+      $("setupText").textContent = error || "It runs the language model on this computer. It installs for you only (no administrator) from its GitHub release, checked against the release's checksums.";
+      go.textContent = "Download CherryColaLLM";
+    } else if (justInstalled) {
+      $("setupTitle").textContent = "CherryColaLLM is installed";
+      $("setupText").textContent = "Next, pick a model. Settings shows the ones that suit this computer and downloads the one you choose.";
+    } else if (noModel) {
+      $("setupTitle").textContent = "Pick a model for Grace";
+      $("setupText").textContent = status.message;
+    }
+  }
+  $("setupGo").addEventListener("click", () => {
+    drawSetup({ step: "Starting" });
+    cc.call("grace_install", {}).catch(e => drawSetup(null, e.message));
+  });
+  $("setupModels").addEventListener("click", () => { justInstalled = false; drawSetup(); cc.call("navigate", { text: "cottoncandy://settings/#grace", new_tab: true }); });
+  cc.on("grace_install", async d => {
+    if (d.error) return drawSetup(null, d.error);
+    if (!d.done) return drawSetup(d);
+    status = await cc.call("grace_ready").catch(() => status);
+    justInstalled = true;
+    drawSetup();
+  });
+
   // ---- What the browser tells us ----
   cc.on("grace_partial", d => {
     if (d.slot === "page" && busy.page) showAnswer(d.text, false);
@@ -122,7 +162,8 @@
     if (!status.web) $("web").parentElement.title = "This CherryCola can't search the web yet. Update the cherrycolallm package.";
     drawPage();
     drawChat();
-    if (status.message) { history.push({ role: "note", content: status.message }); drawChat(); showAnswer(status.message, false, true); }
+    drawSetup();
+    if (status.message && status.installed) { history.push({ role: "note", content: status.message }); drawChat(); showAnswer(status.message, false, true); }
     for (const q of status.pending || []) { setMode("chat"); send(q); }
   })();
 })();

@@ -42,6 +42,13 @@
   label.check { display: inline-flex; align-items: center; gap: 6px; color: var(--text-2); font-size: 13px; }
   label.check input { accent-color: var(--accent); }
   .foot { padding: 0 14px 12px; color: var(--text-3); font-size: 11.5px; line-height: 1.45; }
+  .setup { margin: 12px 14px 0; padding: 12px; border-radius: var(--radius); background: var(--card); border: 1px solid var(--hair); display: flex; flex-direction: column; gap: 8px;
+    animation: cc-rise calc(var(--speed) * 1.5) var(--ease) both; }
+  .setup-t { font-weight: 600; } .setup-s { color: var(--text-2); font-size: 12.5px; line-height: 1.45; }
+  .pbar { height: 6px; border-radius: 3px; background: var(--selected); overflow: hidden; }
+  .pbar > i { display: block; height: 100%; width: 0; background: var(--accent); border-radius: 3px; transition: width .3s var(--ease); }
+  .pbar.busy > i { width: 30%; animation: busy 1.2s ease-in-out infinite; }
+  @keyframes busy { from { transform: translateX(-100%); } to { transform: translateX(340%); } }
   .dots::after { content: "…"; animation: dots 1.2s steps(3) infinite; }
   @keyframes dots { 0% { content: "."; } 33% { content: ".."; } 66% { content: "..."; } }
 </style>
@@ -49,6 +56,11 @@
 <body>
 <header><span class="spark" id="spark"></span><h1>Grace</h1><button class="icon-btn" id="close" aria-label="Close Grace" title="Close Grace (Ctrl+Shift+G)"></button></header>
 <span class="chip" title="CherryCola runs the model on this computer. Nothing is sent to a cloud service.">Local AI · on this device</span>
+<div class="setup hidden" id="setup" role="region" aria-label="Set up Grace">
+  <div class="setup-t" id="setupTitle"></div><div class="setup-s" id="setupText"></div>
+  <div class="pbar hidden" id="setupBar"><i></i></div>
+  <div class="row"><button class="btn primary" id="setupGo"></button><button class="btn" id="setupModels">Choose a model</button></div>
+</div>
 <div class="seg" role="tablist"><button data-mode="page" class="on" role="tab">This page</button><button data-mode="chat" role="tab">Chat</button></div>
 
 <section class="view" id="page">

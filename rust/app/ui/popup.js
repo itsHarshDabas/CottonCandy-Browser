@@ -42,6 +42,11 @@
         call("suggest_pick", { index: Number(el.dataset.i) });
       }));
     },
+    notice(d) {
+      box.setAttribute("role", "status");
+      box.innerHTML = `<div class="row"><span class="grow">${esc(d.text || "")}</span></div>`;
+      setTimeout(() => { if (current === d) hide(); }, 3500);
+    },
     menu(d) {
       box.setAttribute("role", "menu");
       box.innerHTML = d.items.map((m, i) => {
@@ -148,7 +153,19 @@
     fit();
   }
 
-  cc.on("show", render);
+  // A popup that was hidden fades in; one that is already showing (suggestions while typing) just updates.
+  let fresh = true;
+  cc.on("show", d => {
+    const kindChanged = !current || current.kind !== d.kind;
+    render(d);
+    if (fresh || kindChanged) {
+      box.classList.remove("enter");
+      void box.offsetWidth;
+      box.classList.add("enter");
+    }
+    fresh = false;
+  });
+  cc.on("hidden", () => { fresh = true; current = null; box.innerHTML = ""; box.classList.remove("enter"); });
   cc.on("find_result", r => {
     const el = document.getElementById("findcount");
     if (el) el.textContent = !r.count ? "No matches" : r.active ? `${r.active} of ${r.count}` : `${r.count} found`;

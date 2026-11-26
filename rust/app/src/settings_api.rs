@@ -1,7 +1,7 @@
 //! The Settings page's calls (cottoncandy://settings/) and the toolbar's quick proxy switch: reading and
 //! changing settings, putting changes into effect, extensions, bookmark files and clearing browsing data.
 
-use crate::browser::{self, Ui};
+use crate::browser::{self, later, Ui};
 use crate::cefx::*;
 use crate::shared;
 use cef::*;
@@ -150,6 +150,57 @@ pub fn call(ui: &mut Ui, browser_id: i32, cmd: &str, args: &Json) -> Res {
             );
             Ok(json!({}))
         }
+        "pick_wallpaper" => {
+            let browser = page_browser(ui, browser_id).ok_or("no page")?;
+            let host = browser.host().ok_or("no page")?;
+            let mut filters = CefStringList::new();
+            filters.append("image/*");
+            let mut callback = Picked::new(browser.clone(), "wallpaper");
+            host.run_file_dialog(
+                FileDialogMode::from(cef_dll_sys::cef_file_dialog_mode_t::FILE_DIALOG_OPEN),
+                Some(&cs("Choose a picture")),
+                None,
+                Some(&mut filters),
+                Some(&mut callback),
+            );
+            Ok(json!({}))
+        }
+        "wallpaper_from_link" => {
+            let url = arg_str(args, "url").trim().to_string();
+            if !url.starts_with("https://") || url.len() > 4096 {
+                return Err("Paste an https:// link to a picture.".into());
+            }
+            let browser = page_browser(ui, browser_id).ok_or("no page")?;
+            // Downloaded once and kept on this computer: the new tab page never loads it from the site.
+            crate::fetch::get(
+                &url,
+                "image/avif,image/webp,image/png,image/jpeg,image/gif",
+                WALLPAPER_LIMIT,
+                None,
+                move |r| {
+                    let reply = match r {
+                        Ok(f) => save_wallpaper(&f.body),
+                        Err(e) => Err(e),
+                    };
+                    wallpaper_done(browser, reply);
+                },
+            );
+            Ok(json!({}))
+        }
+        "free_memory" => {
+            let slept = ui.free_memory();
+            let text = match slept {
+                0 => "Cleared memory caches. No other tab could sleep.".to_string(),
+                1 => "Put 1 tab to sleep and cleared memory caches.".to_string(),
+                n => format!("Put {n} tabs to sleep and cleared memory caches."),
+            };
+            Ok(json!({ "slept": slept, "text": text }))
+        }
+        "open_gpu_report" => {
+            let win = ui.roles.get(&browser_id).map(|r| r.0).ok_or("no window")?;
+            ui.new_tab(win, "chrome://gpu/", true, None);
+            Ok(json!({}))
+        }
         "clear_data" => clear_data(ui, args),
         "restart" => {
             RESTART_REQUESTED.store(true, Ordering::SeqCst);
@@ -288,6 +339,7 @@ fn apply(ui: &mut Ui, old: &Settings, new: &Settings) {
     if old.appearance.dark_web_pages != new.appearance.dark_web_pages
         || old.extensions != new.extensions
         || old.privacy.webrtc_ip_policy != new.privacy.webrtc_ip_policy
+        || old.performance != new.performance
     {
         RESTART_NEEDED.store(true, Ordering::Relaxed);
     }
@@ -398,6 +450,17 @@ wrap_run_file_dialog_callback! {
             if path.is_empty() {
                 return;
             }
+            if self.purpose == "wallpaper" {
+                let saved = match std::fs::metadata(&path) {
+                    Ok(m) if m.len() as usize <= WALLPAPER_LIMIT => {
+                        std::fs::read(&path).map_err(|e| e.to_string()).and_then(|d| save_wallpaper(&d))
+                    }
+                    Ok(_) => Err("That picture is bigger than 25 MB.".into()),
+                    Err(e) => Err(e.to_string()),
+                };
+                wallpaper_done(self.browser.clone(), saved);
+                return;
+            }
             let reply = match self.purpose {
                 "import" => import_bookmarks(&path),
                 _ => json!({ "folder": path }),
@@ -405,6 +468,50 @@ wrap_run_file_dialog_callback! {
             run_js(&self.browser, &emit_js(self.purpose, &reply));
         }
     }
+}
+
+const WALLPAPER_LIMIT: usize = 25 * 1024 * 1024;
+
+/// Keeps a copy of the new tab picture in CottonCandy's data folder (so moving or deleting the original, or
+/// the site taking it down, doesn't lose it). Only real pictures are kept. Returns where it went.
+fn save_wallpaper(data: &[u8]) -> Result<String, String> {
+    let kind = crate::fetch::image_kind(data)
+        .ok_or("That isn't a PNG, JPEG, WebP, GIF or AVIF picture.")?;
+    let dir = cottoncandy_core::paths::data_dir();
+    std::fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
+    // A new name each time, so pages that showed the old picture don't keep it from a cache.
+    let path = dir.join(format!("wallpaper-{}.{kind}", now()));
+    std::fs::write(&path, data).map_err(|e| e.to_string())?;
+    if let Ok(entries) = std::fs::read_dir(&dir) {
+        for e in entries.flatten() {
+            let name = e.file_name().to_string_lossy().into_owned();
+            if name.starts_with("wallpaper-") && e.path() != path {
+                let _ = std::fs::remove_file(e.path());
+            }
+        }
+    }
+    Ok(path.to_string_lossy().into_owned())
+}
+
+/// Puts a saved picture behind the new tab page and tells the Settings page (which then works out its color).
+fn wallpaper_done(browser: Browser, saved: Result<String, String>) {
+    later(move |ui| {
+        let reply = saved.and_then(|path| {
+            change(ui, |s| {
+                let mut s = s.clone();
+                s.appearance.newtab_background = "image".into();
+                s.appearance.wallpaper_path = path.clone();
+                s.appearance.wallpaper_accent.clear();
+                Ok(s)
+            })
+            .map(|_| path)
+        });
+        let data = match reply {
+            Ok(path) => json!({ "path": path }),
+            Err(e) => json!({ "error": e }),
+        };
+        run_js(&browser, &emit_js("wallpaper", &data));
+    });
 }
 
 struct ImportWhat {

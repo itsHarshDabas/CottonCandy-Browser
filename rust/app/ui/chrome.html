@@ -31,6 +31,11 @@
   .tab.pinned .title, .tab.pinned .x { display: none; }
   .spin { width: 14px; height: 14px; border-radius: 50%; border: 2px solid var(--hair); border-top-color: var(--accent); animation: spin .8s linear infinite; }
   @keyframes spin { to { transform: rotate(360deg); } }
+  /* A new tab fades in; a sleeping tab's icon is dimmed until it is opened again. */
+  .tab.born { animation: cc-fade-in calc(var(--speed) * 1.2) var(--ease) both; }
+  .tab.asleep .fav { opacity: .45; filter: grayscale(1); }
+  .tab .fav { transition: opacity var(--speed) var(--ease); }
+  .tab .x { transition: opacity var(--speed) var(--ease), background var(--speed) var(--ease); }
   #newtab { margin-bottom: 4px; }
   .grow { flex: 1; height: 100%; }
   #wincontrols { display: flex; gap: 4px; align-self: center; }

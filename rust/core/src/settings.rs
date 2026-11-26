@@ -16,6 +16,7 @@ pub struct Settings {
     pub network: Network,
     pub downloads: Downloads,
     pub grace: Grace,
+    pub performance: Performance,
     pub extensions: ExtensionSettings,
     /// Per-site overrides of the shields, by host (`example.org`).
     pub sites: BTreeMap<String, SiteSettings>,
@@ -53,6 +54,10 @@ pub struct Appearance {
     /// gradient, aurora, mesh, plain, or image (with `wallpaper_path`)
     pub newtab_background: String,
     pub wallpaper_path: String,
+    /// With a picture behind the new tab page, the accent color comes from the picture.
+    pub adaptive_accent: bool,
+    /// The picture's color (#rrggbb), worked out by the Settings page when the picture is chosen.
+    pub wallpaper_accent: String,
     pub newtab_show_shortcuts: bool,
     pub newtab_show_clock: bool,
     /// Extra CSS for CottonCandy's own pages and toolbar (not web pages).
@@ -77,6 +82,8 @@ impl Default for Appearance {
             motion: true,
             newtab_background: "aurora".into(),
             wallpaper_path: String::new(),
+            adaptive_accent: true,
+            wallpaper_accent: String::new(),
             newtab_show_shortcuts: true,
             newtab_show_clock: true,
             custom_css: String::new(),
@@ -94,6 +101,19 @@ pub const ACCENTS: &[(&str, &str)] = &[
     ("green", "#22c55e"),
     ("graphite", "#6b7280"),
 ];
+
+impl Appearance {
+    /// The accent in use as #rrggbb: the picture's color when it adapts to one, else the chosen accent.
+    pub fn accent_in_use(&self) -> String {
+        if self.adaptive_accent
+            && self.newtab_background == "image"
+            && is_hex_color(&self.wallpaper_accent)
+        {
+            return self.wallpaper_accent.to_ascii_lowercase();
+        }
+        accent_color(&self.accent)
+    }
+}
 
 /// The accent as #rrggbb.
 pub fn accent_color(accent: &str) -> String {
@@ -500,6 +520,29 @@ impl SecureDns {
     }
 }
 
+// ---- performance ----------------------------------------------------------------------------------
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct Performance {
+    /// Draw pages, video and WebGL with the graphics card (needs a restart). Off is only for broken drivers.
+    pub hardware_acceleration: bool,
+    /// Use the graphics card even when Chromium's list of bad drivers says not to (needs a restart).
+    pub ignore_gpu_blocklist: bool,
+    /// Scrolling with the wheel or keys glides instead of jumping (needs a restart).
+    pub smooth_scrolling: bool,
+}
+
+impl Default for Performance {
+    fn default() -> Self {
+        Performance {
+            hardware_acceleration: true,
+            ignore_gpu_blocklist: false,
+            smooth_scrolling: true,
+        }
+    }
+}
+
 // ---- downloads, Grace, extensions ----------------------------------------------------------------------
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -676,6 +719,11 @@ impl Settings {
             .retain(|host, _| crate::omnibox::looks_like_host(host) && host.len() < 254);
         for site in self.sites.values_mut() {
             site.zoom = site.zoom.map(|z| z.clamp(25, 500));
+        }
+        if !self.appearance.wallpaper_accent.is_empty()
+            && !is_hex_color(&self.appearance.wallpaper_accent)
+        {
+            self.appearance.wallpaper_accent.clear();
         }
         if self.grace.command.trim().is_empty() || self.grace.command.contains(['\n', '\0']) {
             self.grace.command = d.grace.command;

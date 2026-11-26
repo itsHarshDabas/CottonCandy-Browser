@@ -17,6 +17,9 @@ pub const HANDOFF_SCHEMES: &[&str] = &["mailto", "tel"];
 /// Schemes a user may type to open directly.
 pub const OPENABLE_SCHEMES: &[&str] = &["http", "https", "file", "about", crate::INTERNAL_SCHEME];
 
+/// Chromium pages the user may open: the graphics report and the media (codec) report.
+pub const CHROME_PAGES: &[&str] = &["chrome://gpu/", "chrome://media-internals/"];
+
 /// The scheme of `text`, lowercase, if it starts with one.
 pub fn url_scheme(text: &str) -> Option<String> {
     let end = text.find(':')?;
@@ -176,6 +179,10 @@ pub fn navigation_decision(
     if typed && OPENABLE_SCHEMES.contains(&scheme.as_str()) {
         return Navigation::Allow;
     }
+    // Chromium's own reports, only when opened by the user (Settings → Performance links the graphics one).
+    if typed && is_main_frame && CHROME_PAGES.iter().any(|p| url.eq_ignore_ascii_case(p)) {
+        return Navigation::Allow;
+    }
     if HANDOFF_SCHEMES.contains(&scheme.as_str()) {
         return if is_main_frame && (typed || user_initiated) {
             Navigation::Handoff
@@ -299,6 +306,22 @@ mod tests {
     use super::*;
 
     const DDG: &str = "https://duckduckgo.com/?q={}";
+
+    #[test]
+    fn chrome_reports_only_when_typed() {
+        assert_eq!(
+            navigation_decision("chrome://gpu/", "", true, true, true),
+            Navigation::Allow
+        );
+        assert_eq!(
+            navigation_decision("chrome://gpu/", "https://a.test/", true, false, true),
+            Navigation::Block
+        );
+        assert_eq!(
+            navigation_decision("chrome://settings/", "", true, true, true),
+            Navigation::Block
+        );
+    }
 
     #[test]
     fn typed_text() {

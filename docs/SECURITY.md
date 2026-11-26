@@ -79,6 +79,24 @@ browser through `cottoncandy://<page>/api/<call>`.
   a new tab.
 - **Limits.** Output is capped at 128 KB. Every run has a time limit, and Stop ends it.
 
+- **Model names.** Settings and the Grace panel can ask CherryCola to list models, switch the model in use
+  (`use`) and download one (`pull ... --use`). A model name may only hold letters, digits and `._:/-@+`, can't
+  start with `-` (so it can't pass itself off as an option), and goes as its own argument, never through a shell.
+- **Installing CherryColaLLM.** The Grace panel's Download button fetches the newest release's `SHA256SUMS`
+  and the one file for this system from `github.com/itsHarshDabas/CherryColaLLM/releases/latest/download/`
+  through Chromium's network stack (the user's proxy and secure DNS apply), over https only. The file name
+  must match the expected pattern, and the file is installed only if its SHA-256 matches. It installs for the
+  current user only: on Windows the Inno Setup installer runs with `/SILENT` into the user's own programs folder
+  (no administrator); on Linux the archive is unpacked by `tar` (which refuses absolute paths and `..`) into
+  CottonCandy's data folder and checked before it replaces an earlier copy.
+
+### New tab picture
+
+- A picture chosen on the computer or given by an https link is copied into CottonCandy's data folder. It is
+  kept only if its first bytes are those of a PNG, JPEG, WebP, GIF or AVIF, whatever its name, and only up
+  to 25 MB. The new tab page loads it from `cottoncandy://.../wallpaper`, which again serves it only if it is a
+  picture, so the page never contacts the site the picture came from.
+
 ### Extensions
 
 `core/src/extensions.rs` installs extensions.

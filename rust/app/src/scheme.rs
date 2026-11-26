@@ -72,6 +72,8 @@ fn mime(name: &str) -> &'static str {
         "png" => "image/png",
         "jpg" | "jpeg" => "image/jpeg",
         "webp" => "image/webp",
+        "gif" => "image/gif",
+        "avif" => "image/avif",
         "json" => "application/json",
         _ => "application/octet-stream",
     }
@@ -155,7 +157,7 @@ fn favicon(query: &str) -> Reply {
 fn wallpaper() -> Reply {
     let path = shared::settings().appearance.wallpaper_path;
     let lower = path.to_ascii_lowercase();
-    let kind = ["png", "jpg", "jpeg", "webp"]
+    let kind = ["png", "jpg", "jpeg", "webp", "gif", "avif"]
         .into_iter()
         .find(|ext| lower.ends_with(&format!(".{ext}")));
     let (Some(kind), Ok(meta)) = (kind, std::fs::metadata(&path)) else {
@@ -165,8 +167,11 @@ fn wallpaper() -> Reply {
         return Reply::not_found();
     }
     match std::fs::read(&path) {
-        Ok(data) => Reply::new(200, mime(&format!("x.{kind}")), data),
-        Err(_) => Reply::not_found(),
+        // Served only if the bytes really are a picture, whatever the file is called.
+        Ok(data) if crate::fetch::image_kind(&data).is_some() => {
+            Reply::new(200, mime(&format!("x.{kind}")), data)
+        }
+        _ => Reply::not_found(),
     }
 }
 

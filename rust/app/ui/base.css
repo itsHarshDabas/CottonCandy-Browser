@@ -7,7 +7,7 @@
   --danger: #f87171; --ok: #4ade80; --warn: #fbbf24;
   --accent: #3b82f6; --accent-fg: #fff; --accent-soft: rgba(59,130,246,.16);
   --radius: 10px; --font-size: 13px; --pad: 8px; --row: 34px;
-  --glass: rgba(23,26,33,.72); --blur: 18px; --speed: .16s;
+  --glass: rgba(23,26,33,.72); --blur: 18px; --speed: .16s; --ease: cubic-bezier(.2, .8, .2, 1);
   --font: "Inter", "Segoe UI Variable", "Segoe UI", system-ui, -apple-system, "Cantarell", sans-serif;
 }
 :root[data-theme="light"] {
@@ -19,6 +19,15 @@
 :root[data-density="compact"] { --pad: 5px; --row: 28px; }
 :root[data-density="spacious"] { --pad: 11px; --row: 40px; }
 :root[data-motion="off"] { --speed: 0s; }
+/* Motion: short fades and small moves only. Animations off (Settings) or the system's reduce-motion setting
+   turns them all off. Only opacity and transform animate, which the GPU does without redrawing the page. */
+@keyframes cc-fade-in { from { opacity: 0; } to { opacity: 1; } }
+@keyframes cc-rise { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
+@keyframes cc-pop { from { opacity: 0; transform: translateY(-4px) scale(.985); } to { opacity: 1; transform: none; } }
+@media (prefers-reduced-motion: reduce) {
+  :root { --speed: 0s; }
+  *, *::before, *::after { animation: none !important; transition: none !important; }
+}
 :root[data-translucency="off"] { --glass: var(--bg-2); --blur: 0px; }
 * { box-sizing: border-box; }
 html, body { margin: 0; background: var(--bg); color: var(--text); font: var(--font-size)/1.45 var(--font); }
@@ -27,7 +36,8 @@ button { cursor: default; }
 a { color: var(--accent); text-decoration: none; }
 ::selection { background: var(--accent); color: var(--accent-fg); }
 .btn { height: calc(var(--row) - 4px); padding: 0 14px; border-radius: calc(var(--radius) - 2px); border: 1px solid var(--hair);
-  background: var(--card); transition: background var(--speed); }
+  background: var(--card); transition: background var(--speed) var(--ease), filter var(--speed) var(--ease), transform var(--speed) var(--ease); }
+.btn:active { transform: scale(.98); }
 .btn:hover { background: var(--hover); }
 .btn.primary { background: var(--accent); border-color: transparent; color: var(--accent-fg); }
 .btn.primary:hover { filter: brightness(1.08); }
@@ -38,14 +48,15 @@ a { color: var(--accent); text-decoration: none; }
 .icon-btn:disabled { opacity: .35; pointer-events: none; }
 .icon-btn.on { color: var(--accent); }
 .icon-btn svg { width: 17px; height: 17px; }
-.field { height: var(--row); border-radius: var(--radius); background: var(--card); border: 1px solid var(--hair); padding: 0 12px; outline: none; }
+.field { height: var(--row); border-radius: var(--radius); background: var(--card); border: 1px solid var(--hair); padding: 0 12px; outline: none;
+  transition: border-color var(--speed) var(--ease), box-shadow var(--speed) var(--ease); }
 .field:focus { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }
 /* A switch: <label class="switch"><input type="checkbox"><span></span></label> */
 .switch { position: relative; width: 38px; height: 22px; flex: none; }
 .switch input { opacity: 0; position: absolute; inset: 0; margin: 0; }
 .switch span { position: absolute; inset: 0; border-radius: 11px; background: var(--selected); transition: background var(--speed); }
 .switch span::after { content: ""; position: absolute; top: 3px; left: 3px; width: 16px; height: 16px; border-radius: 50%; background: #fff;
-  box-shadow: 0 1px 3px rgba(0,0,0,.3); transition: transform var(--speed); }
+  box-shadow: 0 1px 3px rgba(0,0,0,.3); transition: transform var(--speed) var(--ease); }
 .switch input:checked + span { background: var(--accent); }
 .switch input:checked + span::after { transform: translateX(16px); }
 .switch input:focus-visible + span { outline: 2px solid var(--accent); outline-offset: 2px; }

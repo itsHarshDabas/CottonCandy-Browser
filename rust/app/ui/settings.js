@@ -9,6 +9,10 @@
   let message = {};   // section id -> {kind, text} shown at the top of that section
   let sources = null; // browsers found on this computer, for importing (fetched once)
   let importing = false;
+  let grace = null;      // what CherryCola says: installed models, the one in use, what suits this computer
+  let pulling = null;    // {model, status, percent} while a model downloads
+  let installing = null; // {step, percent} while CherryColaLLM installs
+  let wallpaperBusy = false;
 
   const get = path => path.split(".").reduce((o, k) => (o == null ? undefined : o[k]), state.settings);
 
@@ -66,7 +70,14 @@
       return card([
         row(`<div class="lbl" style="width:100%"><div style="margin-bottom:10px">Background</div><div class="bgs">${["aurora", "gradient", "mesh", "plain", "image"].map(b =>
           `<button class="bg ${v === b ? "on" : ""}" data-v="${b}" data-path="appearance.newtab_background" aria-label="${b} background">${b[0].toUpperCase() + b.slice(1)}</button>`).join("")}</div></div>`, "stack"),
-        v === "image" ? text("appearance.wallpaper_path", "Picture", "A PNG, JPEG or WebP file on this computer", "C:\\Users\\me\\Pictures\\wall.jpg") : "",
+        v === "image" ? row(`${lbl("Picture", get("appearance.wallpaper_path") ? "Kept in CottonCandy's own folder, so moving the original doesn't lose it" : "None yet")}
+          <div class="row-actions"><button class="btn" id="wpPick" ${wallpaperBusy ? "disabled" : ""}>Choose from this computer…</button></div>`) : "",
+        v === "image" ? row(`<div class="lbl" style="width:100%"><div>Or use a picture from the web</div><div class="sub">Paste a link to a PNG, JPEG, WebP, GIF or AVIF. It's downloaded once and kept here.</div>
+          <div style="display:flex;gap:8px;margin-top:10px"><input id="wpUrl" class="field" style="flex:1;width:auto" placeholder="https://example.org/picture.jpg" aria-label="Picture link" spellcheck="false">
+          <button class="btn primary" id="wpGo" ${wallpaperBusy ? "disabled" : ""}>${wallpaperBusy ? "Downloading…" : "Use link"}</button></div></div>`, "stack") : "",
+        v === "image" ? row(`${lbl("Colors from the picture", "The accent color follows the picture, and the clock and text stay readable on it")}
+          ${get("appearance.wallpaper_accent") && get("appearance.adaptive_accent") ? `<span class="swatch on" style="background:${esc(get("appearance.wallpaper_accent"))}" title="${esc(get("appearance.wallpaper_accent"))}"></span>` : ""}
+          <label class="switch"><input type="checkbox" data-path="appearance.adaptive_accent" ${get("appearance.adaptive_accent") ? "checked" : ""} aria-label="Colors from the picture"><span></span></label>`) : "",
         sw("appearance.newtab_show_clock", "Clock", ""),
         sw("appearance.newtab_show_shortcuts", "Shortcuts to your most visited sites", ""),
       ]);
@@ -85,6 +96,13 @@
       sw("grace.web_results", "Web results in Grace Chat", "Grace searches the web and cites what it found"),
       sw("grace.unload_after_enhance", "Unload the model after Enhance search", "Frees its memory as soon as the search is fixed"),
       text("grace.command", "CherryCola command", "Leave as cherrycola unless it's installed somewhere else", "cherrycola"),
+    ]) + `<h3>Model</h3>` + graceModels() },
+    { id: "performance", icon: "bolt", title: "Performance", lead: "Memory and graphics. Changes to graphics take effect after a restart.", body: () => card([
+      row(`${lbl("Free up memory", "Tabs you aren't looking at go to sleep and every page drops its caches. No tab closes: a sleeping tab loads again when you open it. Pages with unsaved work stay awake.")}<button class="btn" id="freeMem">Free up memory</button>`),
+      sw("performance.hardware_acceleration", "Use the graphics card", "Draws pages, video and WebGL on the GPU. Only turn off if pages flicker or show garbage."),
+      sw("performance.ignore_gpu_blocklist", "Use the graphics card even on drivers Chromium distrusts", "Chromium draws with the processor on drivers it has had trouble with, which makes WebGL, video and scrolling slow. Try this if the graphics report says hardware acceleration is off."),
+      sw("performance.smooth_scrolling", "Smooth scrolling", "The wheel and arrow keys glide instead of jumping"),
+      row(`${lbl("Graphics report", "Shows whether the graphics card is in use for each kind of drawing (chrome://gpu)")}<button class="btn" id="gpuReport">Open</button>`),
     ]) },
     { id: "shields", icon: "shield", title: "Shields", lead: "Protections that apply to every site. You can turn them off for one site from the shield in the address bar.", body: () => {
       const lists = state.options.lists, on = get("shields.filter_lists") || [];
@@ -183,6 +201,78 @@
       row(`${lbl("Reset settings", "Puts every setting back to its default. Installed extensions, bookmarks and history stay.")}<button class="btn danger" data-reset="all">Reset all</button>`),
     ]) },
   ];
+
+  function graceModels() {
+    if (installing) return card([row(`${lbl("Installing CherryColaLLM", installing.step || "")}${bar(installing.percent)}`)]);
+    if (!grace) return card([row(lbl("Asking CherryCola…", ""))]);
+    if (!grace.installed) return card([row(`${lbl("CherryColaLLM isn't installed", "Grace needs it to run a model on this computer. It installs for you only, without an administrator.")}<button class="btn primary" id="ccInstall">Install CherryColaLLM</button>`)]);
+    const st = grace.status || {}, rec = grace.recommend || {};
+    const rows = [];
+    if (grace.message) rows.push(row(lbl("CherryCola says", grace.message)));
+    const models = st.models || [];
+    if (models.length) {
+      const opts = models.includes(st.model) ? models : [st.model, ...models];
+      rows.push(row(`${lbl("Model Grace uses", st.running ? `Loaded now: ${st.running}` : "Loads when Grace first answers")}<select class="field" id="ccModel" aria-label="Model Grace uses">${
+        opts.map(m => `<option value="${esc(m)}" ${m === st.model ? "selected" : ""}>${esc(m)}</option>`).join("")}</select>`));
+    } else if (st.reachable === false) {
+      rows.push(row(lbl(`The model engine (${st.backend || "Ollama"}) isn't running`, rec.engine && !rec.engine_installed ? `Install it first: ${rec.engine}. Then download a model below.` : "Start it, then come back here.")));
+    } else {
+      rows.push(row(lbl("No model downloaded yet", "Download one below. Grace uses it right away.")));
+    }
+    if (pulling) rows.push(row(`${lbl("Downloading " + pulling.model, pulling.status || "Starting…")}${bar(pulling.percent)}`));
+    const fits = (rec.models || []).filter(m => m.fits);
+    if (fits.length) {
+      const where = rec.runs_on === "gpu" ? `your graphics card (${rec.vram_gb} GB)` : `the processor (${rec.ram_gb} GB of memory)`;
+      rows.push(row(`<div class="lbl" style="width:100%"><div>Models that suit this computer</div><div class="sub">They run on ${esc(where)}. Recommended: ${esc(rec.recommended || "")}</div>
+        <div class="models">${fits.map(m => `<div class="model"><div class="grow"><div>${esc(m.model)}${m.model === rec.recommended ? ' <span class="tag">Recommended</span>' : ""}${models.includes(m.model) ? ' <span class="tag">Downloaded</span>' : ""}</div>
+          <div class="sub">${esc(m.size_gb)} GB · ${esc(m.note)}${m.slow ? " · slow here" : ""}</div></div>
+          ${models.includes(m.model) ? (m.model === st.model ? '<span class="muted small">In use</span>' : `<button class="btn" data-use="${esc(m.model)}">Use</button>`)
+            : `<button class="btn" data-pull="${esc(m.model)}" ${pulling ? "disabled" : ""}>Download</button>`}</div>`).join("")}</div></div>`, "stack"));
+    }
+    rows.push(row(`<div class="lbl" style="width:100%"><div>Another model</div><div class="sub">An Ollama name (qwen3:8b), a Hugging Face GGUF (Qwen/Qwen3-4B-GGUF:Q4_K_M) or an https link to a .gguf</div>
+      <div style="display:flex;gap:8px;margin-top:10px"><input id="ccOther" class="field" style="flex:1;width:auto" placeholder="qwen3:8b" aria-label="Model to download" spellcheck="false"><button class="btn" id="ccPull" ${pulling ? "disabled" : ""}>Download</button></div></div>`, "stack"));
+    return card(rows);
+  }
+  const bar = pct => `<div class="pbar" role="progressbar" ${pct != null ? `aria-valuenow="${Math.round(pct)}"` : ""}><i style="width:${pct != null ? Math.max(2, pct) : 30}%" class="${pct == null ? "busy" : ""}"></i></div>`;
+
+  // The picture's color for the accent: the most common lively color, made bright enough to read on.
+  async function pictureAccent() {
+    const img = new Image();
+    img.src = "/wallpaper?v=" + Date.now();
+    await img.decode();
+    const c = document.createElement("canvas");
+    c.width = c.height = 48;
+    const g = c.getContext("2d", { willReadFrequently: true });
+    g.drawImage(img, 0, 0, 48, 48);
+    const px = g.getImageData(0, 0, 48, 48).data;
+    const buckets = new Map();
+    for (let i = 0; i < px.length; i += 4) {
+      const [r, gr, b] = [px[i] / 255, px[i + 1] / 255, px[i + 2] / 255];
+      const max = Math.max(r, gr, b), min = Math.min(r, gr, b), d = max - min;
+      const sat = max ? d / max : 0;
+      if (sat < .25 || max < .2) continue; // grays and near black say nothing about the picture's color
+      let h = d === 0 ? 0 : max === r ? ((gr - b) / d) % 6 : max === gr ? (b - r) / d + 2 : (r - gr) / d + 4;
+      h = (h * 60 + 360) % 360;
+      const key = Math.round(h / 20) % 18, w = sat * max;
+      const e = buckets.get(key) || { w: 0, r: 0, g: 0, b: 0 };
+      e.w += w; e.r += r * w; e.g += gr * w; e.b += b * w;
+      buckets.set(key, e);
+    }
+    const best = [...buckets.values()].sort((a, b) => b.w - a.w)[0];
+    if (!best) return null;
+    let [r, gr, b] = [best.r / best.w, best.g / best.w, best.b / best.w];
+    // Into a lightness that reads on both the dark and the light theme.
+    const max = Math.max(r, gr, b), min = Math.min(r, gr, b), l = (max + min) / 2;
+    const want = Math.min(.62, Math.max(.48, l)), scale = l ? want / l : 1;
+    [r, gr, b] = [r, gr, b].map(v => Math.min(1, v * scale));
+    return "#" + [r, gr, b].map(v => Math.round(v * 255).toString(16).padStart(2, "0")).join("");
+  }
+  async function adaptToPicture() {
+    try {
+      const color = await pictureAccent();
+      if (color) await set("appearance.wallpaper_accent", color);
+    } catch (e) { /* not a picture the browser can draw: the accent stays */ }
+  }
 
   // ---- drawing -------------------------------------------------------------------------------------
   function render() {
@@ -284,6 +374,31 @@
       catch (e) { flash("bookmarks", "err", e.message); }
     });
     click("openClear", () => $("clear").showModal());
+    click("wpPick", () => cc.call("pick_wallpaper", {}));
+    const wpGo = async () => {
+      const url = $("wpUrl").value.trim();
+      if (!url) return;
+      wallpaperBusy = true; render();
+      try { await cc.call("wallpaper_from_link", { url }); }
+      catch (e) { wallpaperBusy = false; flash("newtab", "err", e.message); }
+    };
+    click("wpGo", wpGo);
+    if ($("wpUrl")) $("wpUrl").addEventListener("keydown", e => { if (e.key === "Enter") wpGo(); });
+    click("freeMem", async () => {
+      try { const r = await cc.call("free_memory", {}); flash("performance", "ok", r.text); }
+      catch (e) { flash("performance", "err", e.message); }
+    });
+    click("gpuReport", () => cc.call("open_gpu_report", {}));
+    click("ccInstall", () => {
+      installing = { step: "Starting" }; render();
+      cc.call("grace_install", {}).catch(e => { installing = null; flash("grace", "err", e.message); });
+    });
+    const model = $("ccModel");
+    if (model) model.addEventListener("change", () => cc.call("grace_use", { model: model.value }).catch(e => flash("grace", "err", e.message)));
+    const pull = m => { if (!m) return; pulling = { model: m }; render(); cc.call("grace_pull", { model: m }).catch(e => { pulling = null; flash("grace", "err", e.message); }); };
+    main.querySelectorAll("[data-pull]").forEach(el => el.addEventListener("click", () => pull(el.dataset.pull)));
+    main.querySelectorAll("[data-use]").forEach(el => el.addEventListener("click", () => cc.call("grace_use", { model: el.dataset.use }).catch(e => flash("grace", "err", e.message))));
+    click("ccPull", () => pull($("ccOther").value.trim()));
   }
 
   async function installExt() {
@@ -294,6 +409,24 @@
   }
 
   // ---- events from the browser -------------------------------------------------------------------
+  cc.on("grace_models", d => { grace = d; render(); });
+  cc.on("grace_pull", d => {
+    if (d.done) { pulling = null; flash("grace", "ok", `Downloaded ${d.model}. Grace uses it now.`); return; }
+    if (d.error) { pulling = null; flash("grace", "err", d.error); return; }
+    pulling = d; render();
+  });
+  cc.on("grace_install", d => {
+    if (d.done) { installing = null; flash("grace", "ok", "CherryColaLLM is installed."); cc.call("grace_models", {}); return; }
+    if (d.error) { installing = null; flash("grace", "err", d.error); return; }
+    installing = d; render();
+  });
+  cc.on("wallpaper", async r => {
+    wallpaperBusy = false;
+    if (r.error) { flash("newtab", "err", r.error); return; }
+    state = await cc.call("settings_get", {});
+    flash("newtab", "ok", "New picture set.");
+    adaptToPicture();
+  });
   cc.on("ext_result", async r => {
     state = await cc.call("settings_get", {});
     flash("extensions", r.error ? "err" : "ok", r.error || `Installed ${r.installed}. Restart to start it.`);
@@ -338,5 +471,8 @@
     render();
     jump();
     cc.call("import_sources", {}).then(r => { sources = r.sources; }).catch(() => { sources = []; }).finally(render);
+    cc.call("grace_models", {}).catch(() => {});
+    // A picture chosen before colors could follow it (or typed in by path) gets its color now.
+    if (get("appearance.newtab_background") === "image" && get("appearance.wallpaper_path") && !get("appearance.wallpaper_accent")) adaptToPicture();
   })();
 })();
