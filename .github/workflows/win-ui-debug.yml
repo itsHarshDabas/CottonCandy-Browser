@@ -57,14 +57,14 @@ jobs:
           Add-Type -AssemblyName System.Windows.Forms
           $b = [System.Windows.Forms.Screen]::PrimaryScreen.Bounds
           Add-Type -AssemblyName System.Windows.Forms
-          function Type([string]$t) { foreach ($c in $t.ToCharArray()) { [System.Windows.Forms.SendKeys]::SendWait("$c"); Start-Sleep -Milliseconds 120 } ; Start-Sleep 2 }
-          function Key([string]$k) { [System.Windows.Forms.SendKeys]::SendWait($k); Start-Sleep 1 }
-          "== 1. type at startup (the new tab's search box has focus)"; Type "hello"; node tools/win-debug/values.js
+          function Send-Text([string]$t) { foreach ($c in $t.ToCharArray()) { [System.Windows.Forms.SendKeys]::SendWait("$c"); Start-Sleep -Milliseconds 120 } ; Start-Sleep 2 }
+          function Send-Key([string]$k) { [System.Windows.Forms.SendKeys]::SendWait($k); Start-Sleep 1 }
+          "== 1. type at startup (the new tab's search box has focus)"; Send-Text "hello"; node tools/win-debug/values.js
           ./tools/win-debug/shot.ps1 -Path out\3-typed-at-startup.png
-          "== 2. Esc, Ctrl+L, type"; Key "{ESC}"; Key "^l"; Type "example"; node tools/win-debug/values.js
-          "== 3. Esc, Ctrl+F, type in the find bar"; Key "{ESC}"; Key "^f"; Type "duck"; node tools/win-debug/values.js
+          "== 2. Esc, Ctrl+L, type"; Send-Key "{ESC}"; Send-Key "^l"; Send-Text "example"; node tools/win-debug/values.js
+          "== 3. Esc, Ctrl+F, type in the find bar"; Send-Key "{ESC}"; Send-Key "^f"; Send-Text "duck"; node tools/win-debug/values.js
           ./tools/win-debug/shot.ps1 -Path out\4-find.png
-          "== 4. Esc, Ctrl+L, type"; Key "{ESC}"; Key "^l"; Type "abc"; node tools/win-debug/values.js
+          "== 4. Esc, Ctrl+L, type"; Send-Key "{ESC}"; Send-Key "^l"; Send-Text "abc"; node tools/win-debug/values.js
           ./tools/win-debug/shot.ps1 -Path out\5-after-find.png
           Get-Process cottoncandy -ErrorAction SilentlyContinue | Format-Table Id, Responding, MainWindowTitle, CPU
           Stop-Process -Id $p.Id -Force -ErrorAction SilentlyContinue
