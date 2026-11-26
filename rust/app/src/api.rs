@@ -142,21 +142,11 @@ fn call(ui: &mut Ui, win: u32, role: Role, cmd: &str, args: &Json, from_host: &s
                     );
                 }
             }
-            if role == Role::Popup {
-                if let Some(p) = ui.win(win).and_then(|w| w.popup.as_mut()) {
-                    p.ready = true;
-                    if let (Some(data), Some(b)) = (p.pending.take(), &p.browser) {
-                        p.controller.set_visible(1);
-                        run_js(b, &emit_js("show", &data));
-                        if p.kind != "suggest" {
-                            if let Some(view) = p.controller.contents_view() {
-                                view.request_focus();
-                            }
-                        }
-                    }
+            if matches!(role, Role::Popup | Role::Suggest) {
+                if let Some(w) = ui.win(win) {
+                    browser::popup_ready(w, role == Role::Suggest);
                 }
             }
-            ui.mark(win);
             Ok(json!({}))
         }
         "tab_new" => {
@@ -232,19 +222,23 @@ fn call(ui: &mut Ui, win: u32, role: Role, cmd: &str, args: &Json, from_host: &s
         }
         "popup_hide" => {
             let kind = arg_str(args, "kind");
-            let current = ui
-                .win(win)
-                .and_then(|w| w.popup.as_ref())
-                .map(|p| p.kind.clone())
-                .unwrap_or_default();
-            if kind.is_empty() || kind == current {
-                hide_popup(ui, win);
+            if kind == "suggest" {
+                browser::hide_suggestions(ui, win);
+            } else {
+                let current = ui
+                    .win(win)
+                    .and_then(|w| w.popup.as_ref())
+                    .map(|p| p.kind.clone())
+                    .unwrap_or_default();
+                if kind.is_empty() || kind == current {
+                    hide_popup(ui, win);
+                }
             }
             Ok(json!({}))
         }
         "popup_resize" => {
             let height = args.get("height").and_then(Json::as_i64).unwrap_or(200) as i32;
-            browser::resize_popup(ui, win, height);
+            browser::resize_popup(ui, win, role == Role::Suggest, height);
             Ok(json!({}))
         }
         "command" => {
@@ -366,7 +360,7 @@ fn call(ui: &mut Ui, win: u32, role: Role, cmd: &str, args: &Json, from_host: &s
         "about" => Ok(about()),
         "popup_warm" => {
             if let Some(w) = ui.win(win) {
-                browser::ensure_popup(w);
+                browser::ensure_popup(w, arg_str(args, "kind") == "suggest");
             }
             Ok(json!({}))
         }

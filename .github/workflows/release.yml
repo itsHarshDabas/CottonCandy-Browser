@@ -7,7 +7,7 @@ on:
   push:
     tags: ["v*"]
   pull_request:
-    paths: [".github/workflows/release.yml", "rust/bench/**", "rust/installer/**"]
+    paths: [".github/workflows/release.yml", "rust/bench/**", "rust/installer/**", "rust/app/**", "tools/ui-check/**"]
   workflow_dispatch:
     inputs:
       tag:
@@ -100,6 +100,48 @@ jobs:
           fi
           grep -q '^CottonCandy ' /tmp/version.txt
           ls -la ../dist
+      - name: The window works (toolbar, typing, find bar)
+        # Starts the packaged browser and drives it with the real mouse and keyboard: the toolbar must load
+        # its styles and scripts, and typed text must land in the address bar and the find bar. v1.0-beta
+        # shipped with neither working on Windows.
+        if: runner.os == 'Windows'
+        shell: pwsh
+        working-directory: dist
+        run: |
+          $ErrorActionPreference = 'Stop'
+          npm install --prefix "$env:RUNNER_TEMP\pw" --silent playwright-core@1.49.1
+          $env:NODE_PATH = "$env:RUNNER_TEMP\pw\node_modules"
+          $check = "$env:GITHUB_WORKSPACE\tools\ui-check"
+          $exe = (Get-ChildItem -Directory -Filter 'cottoncandy-*' | Select-Object -First 1 | Get-ChildItem -Filter cottoncandy.exe).FullName
+          $env:CC_DEBUG_PORT = '9222'
+          $browser = Start-Process $exe -PassThru
+          try {
+            Start-Sleep 20
+            function Check { node "$check\check.js" @args; if ($LASTEXITCODE -ne 0) { throw "Check failed: $args" } }
+            Check loaded
+            # Bring the window to the front with a click on the empty part of the tab row, as a person would.
+            & "$check\input.ps1" -X 700 -Y 18
+            # The new tab's search box has the keyboard, and hands what you type to the address bar.
+            & "$check\input.ps1" -Keys 'hello' -Slow
+            Check value cottoncandy://ui/chrome.html url hello
+            & "$check\input.ps1" -Keys '{ESC}'
+            & "$check\input.ps1" -Keys '^l'
+            & "$check\input.ps1" -Keys 'example' -Slow
+            Check value cottoncandy://ui/chrome.html url example
+            & "$check\input.ps1" -Keys '{ESC}'
+            & "$check\input.ps1" -Keys '^f'
+            & "$check\input.ps1" -Keys 'duck' -Slow
+            Check value cottoncandy://ui/popup.html find duck
+            # Closing the find bar gives the keyboard back.
+            & "$check\input.ps1" -Keys '{ESC}'
+            & "$check\input.ps1" -Keys '^l'
+            & "$check\input.ps1" -Keys 'abc' -Slow
+            Check value cottoncandy://ui/chrome.html url abc
+            Write-Output 'The toolbar loaded, and typing reached the address bar and the find bar.'
+          } finally {
+            Stop-Process -Id $browser.Id -Force -ErrorAction SilentlyContinue
+            Get-Process cottoncandy -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue
+          }
       - name: Install, run and uninstall with the installer
         if: runner.os == 'Windows'
         shell: pwsh

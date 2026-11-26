@@ -195,11 +195,91 @@ fn post_body(request: &mut Request) -> Vec<u8> {
     body
 }
 
+/// What `answer` did with a request.
+enum Answered {
+    /// The reply is ready.
+    Now,
+    /// The reply comes later, through the callback.
+    Later,
+}
+
+/// Decides what a request gets, given the page that made it (its address or origin, "" for none).
+fn answer(
+    reply: &Arc<Mutex<Reply>>,
+    browser_id: i32,
+    source: &str,
+    request: &mut Request,
+    callback: Option<Callback>,
+) -> Answered {
+    let Ok(url) = url::Url::parse(&us(&request.url())) else {
+        *reply.lock().unwrap() = Reply::not_found();
+        return Answered::Now;
+    };
+    let host = url.host_str().unwrap_or("").to_string();
+    let path = url.path().to_string();
+    let method = us(&request.method());
+    // Web pages may not load anything of ours (an image of a cached favicon would tell them where
+    // you've been). Opening one of our pages as a page is fine: on_before_browse already vetted that.
+    let from_internal = source.starts_with(&format!("{}://", cottoncandy_core::INTERNAL_SCHEME));
+    let navigation = request.resource_type() == ResourceType::MAIN_FRAME;
+    if !(from_internal || navigation) {
+        if std::env::var_os("CC_DEBUG").is_some() {
+            eprintln!("[scheme] refused {url}: from {source:?}");
+        }
+        *reply.lock().unwrap() = Reply::not_found();
+        return Answered::Now;
+    }
+    let Some(cmd) = path.strip_prefix("/api/").map(String::from) else {
+        *reply.lock().unwrap() = if method == "GET" {
+            serve(&host, &path, url.query().unwrap_or(""))
+        } else {
+            Reply::not_found()
+        };
+        return Answered::Now;
+    };
+    // Only our own pages, with this session's token, by POST.
+    let from = url::Url::parse(source).ok();
+    let from_host = from
+        .as_ref()
+        .filter(|u| u.scheme() == cottoncandy_core::INTERNAL_SCHEME)
+        .and_then(|u| u.host_str().map(String::from));
+    let token = us(&request.header_by_name(Some(&cs("X-CC-Token"))));
+    let trusted = from_host.as_deref() == Some(host.as_str())
+        && method == "POST"
+        && same_secret(token.as_bytes(), shared::get().token.as_bytes());
+    if std::env::var_os("CC_DEBUG").is_some() && !(trusted && api::allowed(&host, &cmd)) {
+        eprintln!(
+            "[api] refused {cmd}: from={source} host={host} method={method} token_ok={}",
+            same_secret(token.as_bytes(), shared::get().token.as_bytes())
+        );
+    }
+    let (Some(from_host), Some(callback)) = (
+        from_host.filter(|_| trusted && api::allowed(&host, &cmd)),
+        callback,
+    ) else {
+        *reply.lock().unwrap() = Reply::json(403, &serde_json::json!({"error": "not allowed"}));
+        return Answered::Now;
+    };
+    let body = post_body(request);
+    let args: serde_json::Value = serde_json::from_slice(&body).unwrap_or(serde_json::Value::Null);
+    let reply = reply.clone();
+    on_ui(move || {
+        let result = api::dispatch(&cmd, &args, browser_id, &from_host);
+        *reply.lock().unwrap() = match result {
+            Ok(value) => Reply::json(200, &value),
+            Err(error) => Reply::json(400, &serde_json::json!({ "error": error })),
+        };
+        callback.cont();
+    });
+    Answered::Later
+}
+
 wrap_resource_handler! {
     struct Handler {
         reply: Arc<Mutex<Reply>>,
         browser_id: i32,
-        frame_url: String,
+        // The page that asked: its address, or its origin (cottoncandy://ui), or "" when unknown.
+        source: String,
     }
 
     impl ResourceHandler {
@@ -212,70 +292,10 @@ wrap_resource_handler! {
             let (Some(request), Some(handle_request)) = (request, handle_request) else {
                 return 0;
             };
-            let Ok(url) = url::Url::parse(&us(&request.url())) else {
-                *handle_request = 1;
-                *self.reply.lock().unwrap() = Reply::not_found();
-                return 1;
-            };
-            let host = url.host_str().unwrap_or("").to_string();
-            let path = url.path().to_string();
-            let method = us(&request.method());
-            // Web pages may not load anything of ours (an image of a cached favicon would tell them where
-            // you've been). Opening one of our pages as a page is fine: on_before_browse already vetted that.
-            let from_internal = self.frame_url.starts_with(&format!("{}://", cottoncandy_core::INTERNAL_SCHEME));
-            let navigation = request.resource_type() == ResourceType::MAIN_FRAME;
-            if !(from_internal || navigation) {
-                *handle_request = 1;
-                *self.reply.lock().unwrap() = Reply::not_found();
-                return 1;
+            match answer(&self.reply, self.browser_id, &self.source, request, callback.as_deref().cloned()) {
+                Answered::Now => *handle_request = 1,
+                Answered::Later => *handle_request = 0,
             }
-            let Some(cmd) = path.strip_prefix("/api/").map(String::from) else {
-                *handle_request = 1;
-                *self.reply.lock().unwrap() = if method == "GET" {
-                    serve(&host, &path, url.query().unwrap_or(""))
-                } else {
-                    Reply::not_found()
-                };
-                return 1;
-            };
-            // Only our own pages, with this session's token, by POST.
-            let from = url::Url::parse(&self.frame_url).ok();
-            let from_host = from
-                .as_ref()
-                .filter(|u| u.scheme() == cottoncandy_core::INTERNAL_SCHEME)
-                .and_then(|u| u.host_str().map(String::from));
-            let token = us(&request.header_by_name(Some(&cs("X-CC-Token"))));
-            let trusted = from_host.as_deref() == Some(host.as_str())
-                && method == "POST"
-                && same_secret(token.as_bytes(), shared::get().token.as_bytes());
-            if std::env::var_os("CC_DEBUG").is_some() && !(trusted && api::allowed(&host, &cmd)) {
-                eprintln!(
-                    "[api] refused {cmd}: frame={} host={host} method={method} token_ok={}",
-                    self.frame_url,
-                    same_secret(token.as_bytes(), shared::get().token.as_bytes())
-                );
-            }
-            let Some(from_host) = from_host.filter(|_| trusted && api::allowed(&host, &cmd)) else {
-                *handle_request = 1;
-                *self.reply.lock().unwrap() = Reply::json(403, &serde_json::json!({"error": "not allowed"}));
-                return 1;
-            };
-            let body = post_body(request);
-            let args: serde_json::Value = serde_json::from_slice(&body).unwrap_or(serde_json::Value::Null);
-            let Some(callback) = callback.cloned() else {
-                return 0;
-            };
-            *handle_request = 0;
-            let reply = self.reply.clone();
-            let browser_id = self.browser_id;
-            on_ui(move || {
-                let result = api::dispatch(&cmd, &args, browser_id, &from_host);
-                *reply.lock().unwrap() = match result {
-                    Ok(value) => Reply::json(200, &value),
-                    Err(error) => Reply::json(400, &serde_json::json!({ "error": error })),
-                };
-                callback.cont();
-            });
             1
         }
 
@@ -352,6 +372,51 @@ wrap_scheme_handler_factory! {
             ))
         }
     }
+}
+
+// Requests for cottoncandy:// made in one of our browsers. Answering them here rather than through the
+// scheme's factory lets the check use the origin Chromium records for the page that made the request.
+// The factory only sees the request's frame, and a page's first files can be asked for before the browser
+// has a frame to show for it (most often on Windows), which made the toolbar refuse its own style sheets.
+wrap_resource_request_handler! {
+    pub struct InternalRequests {
+        source: String,
+    }
+
+    impl ResourceRequestHandler {
+        // The default answer here is to cancel.
+        fn on_before_resource_load(
+            &self,
+            _browser: Option<&mut Browser>,
+            _frame: Option<&mut Frame>,
+            _request: Option<&mut Request>,
+            _callback: Option<&mut Callback>,
+        ) -> ReturnValue {
+            ReturnValue::CONTINUE
+        }
+
+        fn resource_handler(
+            &self,
+            browser: Option<&mut Browser>,
+            _frame: Option<&mut Frame>,
+            _request: Option<&mut Request>,
+        ) -> Option<ResourceHandler> {
+            Some(Handler::new(
+                Arc::new(Mutex::new(Reply::default())),
+                browser.map(|b| b.identifier()).unwrap_or(0),
+                self.source.clone(),
+            ))
+        }
+    }
+}
+
+/// The handler for a request to cottoncandy://, or None for any other address. `initiator` is the origin
+/// of the page that made the request, as Chromium's network service records it.
+pub fn internal_requests(request: &Request, initiator: &str) -> Option<ResourceRequestHandler> {
+    let prefix = format!("{}://", cottoncandy_core::INTERNAL_SCHEME);
+    us(&request.url())
+        .starts_with(&prefix)
+        .then(|| InternalRequests::new(initiator.to_string()))
 }
 
 pub fn register() {

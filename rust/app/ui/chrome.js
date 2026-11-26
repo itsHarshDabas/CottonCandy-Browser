@@ -5,6 +5,7 @@
   const vertical = document.body.dataset.role === "vtabs";
   let state = null;
   let editing = false;
+  let keepCaret = false;
   let suggestions = [];
   let selected = -1;
   let typedText = "";
@@ -257,13 +258,19 @@
     $("site").addEventListener("click", () => popup("site", { ...rectOf($("site")), width: 340, height: 300, y: rectOf($("address")).y + 40 }));
     $("menu").addEventListener("click", () => popup("menu", anchor($("menu"), 280, 0), { items: mainMenu() }));
     const url = $("url");
-    // The popup (suggestions, menus, Shields) is made on first need; start it as soon as the pointer or the
-    // focus comes to the toolbar, so it is ready by the time it is asked for.
+    // The popups are made on first need: the one for menus and Shields when the pointer first comes to the
+    // toolbar, the one for suggestions when the address bar first gets focus, so each is ready when asked for.
     const warm = () => { if (warm.done) return; warm.done = true; cc.call("popup_warm").catch(() => {}); };
+    const warmSuggest = () => { if (warmSuggest.done) return; warmSuggest.done = true; cc.call("popup_warm", { kind: "suggest" }).catch(() => {}); };
     document.documentElement.addEventListener("pointerover", warm, { once: true });
-    url.addEventListener("focus", warm);
-    url.addEventListener("focus", () => { editing = true; drawShown({}); url.style.color = ""; if (url.value) url.select(); });
-    url.addEventListener("blur", () => { editing = false; setTimeout(hideSuggestions, 150); if (state) { url.value = state.nav.url || ""; drawShown(state.nav.parts || {}); } });
+    url.addEventListener("focus", warmSuggest);
+    url.addEventListener("focus", () => {
+      editing = true; drawShown({}); url.style.color = "";
+      // Clicking in selects the address to type over; arriving with typed text keeps the caret after it.
+      if (keepCaret) url.setSelectionRange(url.value.length, url.value.length); else if (url.value) url.select();
+      keepCaret = false;
+    });
+    url.addEventListener("blur", () => { editing = false; keepCaret = false; setTimeout(hideSuggestions, 150); if (state) { url.value = state.nav.url || ""; drawShown(state.nav.parts || {}); } });
     url.addEventListener("input", () => { clearTimeout(suggestTimer); suggestTimer = setTimeout(suggest, 60); });
     url.addEventListener("keydown", e => {
       if (e.key === "ArrowDown" || e.key === "ArrowUp") {
@@ -332,11 +339,22 @@
     renderTabs();
     renderToolbar();
   });
+  // Typing on the new tab page moves here with what was typed so far, which must not be selected (the next
+  // key would replace it). The focus event can come later, once the toolbar has the keyboard.
   cc.on("focus_address", text => {
     const url = $("url");
     if (!url) return;
-    url.focus();
-    if (typeof text === "string") { url.value = text; suggest(); }
+    if (typeof text === "string" && text) {
+      keepCaret = true;
+      url.focus();
+      url.value = text;
+      url.setSelectionRange(text.length, text.length);
+      suggest();
+    } else {
+      // Ctrl+L, F6, a new tab: select the address to type over, even if the bar had focus already.
+      url.focus();
+      url.select();
+    }
   });
   cc.on("suggest_pick", index => {
     const choice = suggestions[index];
