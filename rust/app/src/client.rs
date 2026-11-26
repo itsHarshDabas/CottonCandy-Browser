@@ -18,7 +18,10 @@ type OsEvent = cef_dll_sys::XEvent;
 pub enum Role {
     Chrome,
     VTabs,
+    /// The popup for menus and panels, which takes the keyboard.
     Popup,
+    /// The popup for address bar suggestions, which leaves the keyboard in the address bar.
+    Suggest,
     /// Grace's side panel.
     Side,
     Tab(u32),
@@ -133,8 +136,8 @@ wrap_life_span_handler! {
                     Role::Chrome => w.chrome_browser = Some(browser),
                     Role::VTabs => w.vtabs_browser = Some(browser),
                     Role::Side => w.grace.browser = Some(browser),
-                    Role::Popup => {
-                        if let Some(p) = w.popup.as_mut() {
+                    Role::Popup | Role::Suggest => {
+                        if let Some(p) = w.overlay(ctx.role == Role::Suggest) {
                             p.browser = Some(browser);
                         }
                     }
@@ -149,7 +152,16 @@ wrap_life_span_handler! {
                                     host.was_hidden(1);
                                 }
                             }
+                            // A new window's first tab gets the keyboard once its browser exists. Nothing
+                            // else in the window asks for it (our own pages don't, see on_set_focus), and a
+                            // window where nothing has the keyboard ignores every key.
+                            if active && w.focus_first_tab {
+                                t.view.request_focus();
+                            }
                             t.browser = Some(browser);
+                        }
+                        if active {
+                            w.focus_first_tab = false;
                         }
                     }
                 }
@@ -522,12 +534,20 @@ wrap_request_handler! {
             &self,
             _browser: Option<&mut Browser>,
             _frame: Option<&mut Frame>,
-            _request: Option<&mut Request>,
-            _is_navigation: ::std::os::raw::c_int,
+            request: Option<&mut Request>,
+            is_navigation: ::std::os::raw::c_int,
             _is_download: ::std::os::raw::c_int,
-            _request_initiator: Option<&CefString>,
+            request_initiator: Option<&CefString>,
             _disable_default_handling: Option<&mut ::std::os::raw::c_int>,
         ) -> Option<ResourceRequestHandler> {
+            // Opening one of our pages goes through the scheme's factory; the files and calls it makes come here.
+            let internal = (is_navigation == 0)
+                .then_some(())
+                .and(request)
+                .and_then(|r| crate::scheme::internal_requests(r, &os(request_initiator)));
+            if let Some(internal) = internal {
+                return Some(internal);
+            }
             // Only web pages in tabs go past Shields; the toolbar and popups load nothing from the web.
             let tab = self.ctx.tab.clone()?;
             Some(crate::shields::TabRequests::new(self.ctx.win, tab))
@@ -758,6 +778,15 @@ wrap_focus_handler! {
     }
 
     impl FocusHandler {
+        // A page takes the keyboard when it loads. Our toolbar, side tabs and popup load when they're made
+        // and whenever they're shown, so on Windows they kept taking it from the tab: you typed into a page
+        // and nothing appeared. They get the keyboard when you click them, or when we hand it to them.
+        fn on_set_focus(&self, _browser: Option<&mut Browser>, source: FocusSource) -> ::std::os::raw::c_int {
+            let by_loading = *source.as_ref() == cef_dll_sys::cef_focus_source_t::FOCUS_SOURCE_NAVIGATION;
+            let ours = matches!(self.ctx.role, Role::Chrome | Role::VTabs | Role::Popup | Role::Suggest);
+            (by_loading && ours) as ::std::os::raw::c_int
+        }
+
         fn on_got_focus(&self, _browser: Option<&mut Browser>) {
             if matches!(self.ctx.role, Role::Tab(_)) {
                 let win = self.ctx.win;

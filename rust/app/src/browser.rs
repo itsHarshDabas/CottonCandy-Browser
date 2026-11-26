@@ -137,7 +137,12 @@ pub struct Win {
     pub body: Panel,
     pub grace: GracePanel,
     /// Made the first time it is needed (see `ensure_popup`).
+    /// Menus and panels: it takes the keyboard, so the find bar and menus can be used with keys.
     pub popup: Option<Popup>,
+    /// Address bar suggestions: it never takes the keyboard, which stays in the address bar.
+    pub suggest: Option<Popup>,
+    /// Until its first tab's browser exists: that tab then gets the keyboard.
+    pub focus_first_tab: bool,
     pub tabs: Vec<Tab>,
     pub active: Option<u32>,
     /// Every live browser in this window, by CEF id. The window may close only when this is empty.
@@ -285,7 +290,7 @@ fn browser_settings(role: Role) -> BrowserSettings {
         // Web pages expect white behind them; the popup is see-through around its rounded box.
         background_color: match role {
             Role::Tab(_) => 0xFFFF_FFFF,
-            Role::Popup => 0x0000_0000,
+            Role::Popup | Role::Suggest => 0x0000_0000,
             _ => DARK_BG,
         },
         ..Default::default()
@@ -598,6 +603,8 @@ pub fn open_window(private: bool, urls: Vec<String>) {
             body,
             grace: GracePanel::default(),
             popup: None,
+            suggest: None,
+            focus_first_tab: true,
             tabs: Vec::new(),
             active: None,
             browsers: HashMap::new(),
@@ -649,16 +656,19 @@ fn ensure_vtabs(w: &mut Win) {
     w.vtabs = Some(view);
 }
 
-/// Makes the floating popup (suggestions, menus, Shields) the first time it is needed, or when the pointer
-/// first comes near the toolbar, so it is ready by the time it is asked for.
-pub fn ensure_popup(w: &mut Win) {
-    if w.popup.is_some() {
+/// Makes a floating popup the first time it is needed (or when the pointer first comes near the toolbar,
+/// or the address bar is clicked), so it is ready by the time it is asked for. There are two: one for
+/// menus and panels, which takes the keyboard, and one for suggestions, which must not. Showing an overlay
+/// that may take the keyboard takes it from the address bar, and what you typed next went nowhere.
+pub fn ensure_popup(w: &mut Win, suggest: bool) {
+    if w.overlay(suggest).is_some() {
         return;
     }
     let mut delegate = FixedView::new(w.sizes.clone(), 2);
+    let role = if suggest { Role::Suggest } else { Role::Popup };
     let Some(view) = create_view(
         w.id,
-        Role::Popup,
+        role,
         "cottoncandy://ui/popup.html",
         w.context.as_ref(),
         &mut delegate,
@@ -669,12 +679,12 @@ pub fn ensure_popup(w: &mut Win) {
     let Some(controller) = w.window.add_overlay_view(
         Some(&mut View::from(&view)),
         DockingMode::from(cef_dll_sys::cef_docking_mode_t::CEF_DOCKING_MODE_CUSTOM),
-        1,
+        (!suggest) as i32,
     ) else {
         return;
     };
     controller.set_visible(0);
-    w.popup = Some(Popup {
+    let popup = Some(Popup {
         controller,
         browser: None,
         ready: false,
@@ -682,6 +692,22 @@ pub fn ensure_popup(w: &mut Win) {
         rect: rect(0, 0, 0, 0),
         pending: None,
     });
+    if suggest {
+        w.suggest = popup;
+    } else {
+        w.popup = popup;
+    }
+}
+
+impl Win {
+    /// The suggestions popup, or the one for menus and panels.
+    pub fn overlay(&mut self, suggest: bool) -> Option<&mut Popup> {
+        if suggest {
+            self.suggest.as_mut()
+        } else {
+            self.popup.as_mut()
+        }
+    }
 }
 
 fn app_icon() -> Option<Image> {
@@ -1099,22 +1125,51 @@ pub fn theme_css() -> String {
     css
 }
 
+fn hide(p: &mut Popup) {
+    p.pending = None;
+    if p.controller.is_visible() != 0 {
+        p.controller.set_visible(0);
+        p.kind.clear();
+    }
+}
+
+/// Hides both popups.
 pub fn hide_popup(ui: &mut Ui, win: u32) {
-    if let Some(p) = ui.win(win).and_then(|w| w.popup.as_mut()) {
-        p.pending = None;
-        if p.controller.is_visible() != 0 {
-            p.controller.set_visible(0);
-            p.kind.clear();
+    let Some(w) = ui.win(win) else { return };
+    let had_keyboard = w
+        .popup
+        .as_ref()
+        .is_some_and(|p| p.controller.is_visible() != 0 && p.kind != "suggest");
+    w.popup.as_mut().map(hide);
+    w.suggest.as_mut().map(hide);
+    if had_keyboard {
+        // The menu or find bar had the keyboard; hiding it doesn't hand it back, so give it to the page.
+        w.window.activate();
+        let active = w.active;
+        if let Some(t) = w.tabs.iter().find(|t| Some(t.id) == active) {
+            t.view.request_focus();
         }
     }
 }
 
-/// Shows the floating popup with `data` (kind, items...) at `r`, in window coordinates.
+pub fn hide_suggestions(ui: &mut Ui, win: u32) {
+    if let Some(p) = ui.win(win).and_then(|w| w.suggest.as_mut()) {
+        hide(p);
+    }
+}
+
+/// Shows a popup with `data` (kind, items...) at `r`, in window coordinates: suggestions in their own
+/// popup, everything else in the one that takes the keyboard.
 pub fn show_popup(ui: &mut Ui, win: u32, kind: &str, r: Rect, data: Json) {
     let Some(w) = ui.win(win) else { return };
     let bounds = w.window.bounds();
-    ensure_popup(w);
-    let Some(p) = w.popup.as_mut() else { return };
+    let suggest = kind == "suggest";
+    // One at a time: a menu over suggestions, or suggestions over a menu, would be a muddle.
+    if let Some(other) = w.overlay(!suggest) {
+        hide(other);
+    }
+    ensure_popup(w, suggest);
+    let Some(p) = w.overlay(suggest) else { return };
     let width = r.width.clamp(120, 720);
     let height = if r.height > 0 { r.height } else { 200 }.clamp(40, 640);
     let x = r.x.clamp(0, (bounds.width - width).max(0));
@@ -1122,27 +1177,41 @@ pub fn show_popup(ui: &mut Ui, win: u32, kind: &str, r: Rect, data: Json) {
     p.kind = kind.to_string();
     p.rect = rect(x, y, width, height);
     p.controller.set_bounds(Some(&p.rect));
-    if let (true, Some(b)) = (p.ready, &p.browser) {
-        p.controller.set_visible(1);
-        run_js(b, &emit_js("show", &data));
-        p.pending = None;
+    if p.ready && p.browser.is_some() {
+        p.pending = Some(data);
+        reveal(p);
     } else {
         // A popup made just now shows once its page is ready, rather than as an empty box.
         p.pending = Some(data);
-        return;
     }
-    // Suggestions keep focus in the address bar; everything else takes it.
-    if kind != "suggest" {
+}
+
+/// Shows a popup's pending contents. Menus and panels take the keyboard; suggestions leave it alone.
+fn reveal(p: &mut Popup) {
+    let (Some(data), Some(b)) = (p.pending.take(), &p.browser) else {
+        return;
+    };
+    p.controller.set_visible(1);
+    run_js(b, &emit_js("show", &data));
+    if p.kind != "suggest" {
         if let Some(view) = p.controller.contents_view() {
             view.request_focus();
         }
     }
 }
 
-pub fn resize_popup(ui: &mut Ui, win: u32, height: i32) {
+/// A popup's page has loaded: show what was asked for while it loaded.
+pub fn popup_ready(w: &mut Win, suggest: bool) {
+    if let Some(p) = w.overlay(suggest) {
+        p.ready = true;
+        reveal(p);
+    }
+}
+
+pub fn resize_popup(ui: &mut Ui, win: u32, suggest: bool, height: i32) {
     let Some(w) = ui.win(win) else { return };
     let max = w.window.bounds().height - 8;
-    let Some(p) = w.popup.as_mut() else { return };
+    let Some(p) = w.overlay(suggest) else { return };
     let height = height.clamp(24, (max - p.rect.y).max(24));
     if height != p.rect.height {
         p.rect.height = height;
