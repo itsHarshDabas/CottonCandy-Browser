@@ -141,6 +141,8 @@ pub struct Win {
     pub popup: Option<Popup>,
     /// Address bar suggestions: it never takes the keyboard, which stays in the address bar.
     pub suggest: Option<Popup>,
+    /// Until its first tab's browser exists: that tab then gets the keyboard.
+    pub focus_first_tab: bool,
     pub tabs: Vec<Tab>,
     pub active: Option<u32>,
     /// Every live browser in this window, by CEF id. The window may close only when this is empty.
@@ -602,6 +604,7 @@ pub fn open_window(private: bool, urls: Vec<String>) {
             grace: GracePanel::default(),
             popup: None,
             suggest: None,
+            focus_first_tab: true,
             tabs: Vec::new(),
             active: None,
             browsers: HashMap::new(),

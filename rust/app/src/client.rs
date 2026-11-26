@@ -152,7 +152,16 @@ wrap_life_span_handler! {
                                     host.was_hidden(1);
                                 }
                             }
+                            // A new window's first tab gets the keyboard once its browser exists. Nothing
+                            // else in the window asks for it (our own pages don't, see on_set_focus), and a
+                            // window where nothing has the keyboard ignores every key.
+                            if active && w.focus_first_tab {
+                                t.view.request_focus();
+                            }
                             t.browser = Some(browser);
+                        }
+                        if active {
+                            w.focus_first_tab = false;
                         }
                     }
                 }
