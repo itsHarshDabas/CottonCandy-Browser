@@ -18,7 +18,10 @@ type OsEvent = cef_dll_sys::XEvent;
 pub enum Role {
     Chrome,
     VTabs,
+    /// The popup for menus and panels, which takes the keyboard.
     Popup,
+    /// The popup for address bar suggestions, which leaves the keyboard in the address bar.
+    Suggest,
     /// Grace's side panel.
     Side,
     Tab(u32),
@@ -133,8 +136,8 @@ wrap_life_span_handler! {
                     Role::Chrome => w.chrome_browser = Some(browser),
                     Role::VTabs => w.vtabs_browser = Some(browser),
                     Role::Side => w.grace.browser = Some(browser),
-                    Role::Popup => {
-                        if let Some(p) = w.popup.as_mut() {
+                    Role::Popup | Role::Suggest => {
+                        if let Some(p) = w.overlay(ctx.role == Role::Suggest) {
                             p.browser = Some(browser);
                         }
                     }
@@ -766,10 +769,16 @@ wrap_focus_handler! {
     }
 
     impl FocusHandler {
+        // A page takes the keyboard when it loads. Our toolbar, side tabs and popup load when they're made
+        // and whenever they're shown, so on Windows they kept taking it from the tab: you typed into a page
+        // and nothing appeared. They get the keyboard when you click them, or when we hand it to them.
+        fn on_set_focus(&self, _browser: Option<&mut Browser>, source: FocusSource) -> ::std::os::raw::c_int {
+            let by_loading = *source.as_ref() == cef_dll_sys::cef_focus_source_t::FOCUS_SOURCE_NAVIGATION;
+            let ours = matches!(self.ctx.role, Role::Chrome | Role::VTabs | Role::Popup | Role::Suggest);
+            (by_loading && ours) as ::std::os::raw::c_int
+        }
+
         fn on_got_focus(&self, _browser: Option<&mut Browser>) {
-            if std::env::var_os("CC_DEBUG").is_some() {
-                eprintln!("[focus] {:?} got focus", self.ctx.role);
-            }
             if matches!(self.ctx.role, Role::Tab(_)) {
                 let win = self.ctx.win;
                 later(move |ui| browser::hide_popup(ui, win));
