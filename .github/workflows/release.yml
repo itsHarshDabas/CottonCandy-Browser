@@ -88,7 +88,10 @@ jobs:
             if [ -n "$ASSET" ]; then
               tag="cef-codecs-${CEF_VERSION#*+}"
               gh release download "$tag" -R "$GITHUB_REPOSITORY" -p "$ASSET" -p "$ASSET.sha256" -D "$RUNNER_TEMP/cef"
-              (cd "$RUNNER_TEMP/cef" && sha256sum -c "$ASSET.sha256")
+              # The .sha256 names the file by the path it was built at, so compare only the hash.
+              want=$(cut -d' ' -f1 "$RUNNER_TEMP/cef/$ASSET.sha256")
+              got=$(sha256sum "$RUNNER_TEMP/cef/$ASSET" | cut -d' ' -f1)
+              [ -n "$want" ] && [ "$want" = "$got" ] || { echo "The CEF download doesn't match its .sha256." >&2; exit 1; }
               py=$(command -v python3 || command -v python)
               "$py" ../tools/cef-codecs/unpack.py "$RUNNER_TEMP/cef/$ASSET" "$CEF_PATH"
             else
