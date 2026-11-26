@@ -23,6 +23,11 @@
   .tab.pinned { order: -1; }
   .spin { width: 14px; height: 14px; border-radius: 50%; border: 2px solid var(--hair); border-top-color: var(--accent); animation: spin .8s linear infinite; }
   @keyframes spin { to { transform: rotate(360deg); } }
+  /* A new tab fades in; a sleeping tab's icon is dimmed until it is opened again. */
+  .tab.born { animation: cc-fade-in calc(var(--speed) * 1.2) var(--ease) both; }
+  .tab.asleep .fav { opacity: .45; filter: grayscale(1); }
+  .tab .fav { transition: opacity var(--speed) var(--ease); }
+  .tab .x { transition: opacity var(--speed) var(--ease), background var(--speed) var(--ease); }
   #newtab { height: var(--row); display: flex; align-items: center; gap: 8px; padding: 0 10px; border: 0; border-radius: var(--radius); background: none; color: var(--text-2); }
   #newtab:hover { background: var(--hover); color: var(--text); } #newtab svg { width: 15px; height: 15px; }
   /* Folded: icons only, centered; the tab's full name is in its tooltip. */
@@ -30,6 +35,10 @@
   body.folded .tab { padding: 0; justify-content: center; gap: 0; }
   body.folded .tab .title, body.folded .tab .x, body.folded .tab .snd, body.folded #newtab span { display: none; }
   body.folded #newtab { justify-content: center; padding: 0; }
+  /* Folding and unfolding: the names fade while the list slides (the browser slides its width). */
+  .tab .title, .tab .x, .tab .snd, #newtab span { transition: opacity var(--speed) ease-out; }
+  body.folding .tab .title, body.folding .tab .x, body.folding .tab .snd, body.folding #newtab span { opacity: 0; }
+  body.unfolding .tab .title, body.unfolding #newtab span { animation: cc-fade-in calc(var(--speed) * 1.4) ease-out both; }
 </style>
 </head>
 <body data-role="vtabs">

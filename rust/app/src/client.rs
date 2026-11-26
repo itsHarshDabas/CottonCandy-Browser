@@ -79,6 +79,9 @@ wrap_client! {
         fn find_handler(&self) -> Option<FindHandler> {
             Some(Find::new(self.ctx.clone()))
         }
+        fn jsdialog_handler(&self) -> Option<JsdialogHandler> {
+            self.ctx.tab_id().map(|_| Dialogs::new())
+        }
     }
 }
 
@@ -156,7 +159,7 @@ wrap_life_span_handler! {
                             // else in the window asks for it (our own pages don't, see on_set_focus), and a
                             // window where nothing has the keyboard ignores every key.
                             if active && w.focus_first_tab {
-                                t.view.request_focus();
+                                t.focus();
                             }
                             t.browser = Some(browser);
                         }
@@ -175,8 +178,10 @@ wrap_life_span_handler! {
             // out ourselves.
             let ctx = self.ctx.clone();
             let id = browser.map(|b| b.identifier()).unwrap_or(0);
+            let sleeping = browser::sleeping(id, false);
             let window_closing = try_with(|ui| {
-                ui.win(ctx.win)
+                ui
+                    .win(ctx.win)
                     .map(|w| {
                         // A browser that got here is on its way out either way (a closed tab too), so the
                         // window shouldn't wait for it.
@@ -188,6 +193,11 @@ wrap_life_span_handler! {
             .unwrap_or(false);
             if window_closing {
                 return 0;
+            }
+            if let (Role::Tab(tab), true) = (ctx.role, sleeping) {
+                // Free memory: the page goes, the tab stays.
+                later(move |ui| ui.tab_slept(ctx.win, tab));
+                return 1;
             }
             if let Role::Tab(tab) = ctx.role {
                 later(move |ui| {
@@ -209,7 +219,8 @@ wrap_life_span_handler! {
                 w.browsers.remove(&id);
                 let closing = w.closing;
                 let empty = w.browsers.is_empty();
-                if let (Role::Tab(tab), false) = (ctx.role, closing) {
+                let slept = browser::sleeping(id, true);
+                if let (Role::Tab(tab), false, false) = (ctx.role, closing, slept) {
                     ui.remove_tab(ctx.win, tab);
                 }
                 if closing && empty {
@@ -218,6 +229,32 @@ wrap_life_span_handler! {
                     }
                 }
             });
+        }
+    }
+}
+
+wrap_jsdialog_handler! {
+    struct Dialogs {}
+
+    impl JsdialogHandler {
+        fn on_before_unload_dialog(
+            &self,
+            browser: Option<&mut Browser>,
+            _message_text: Option<&CefString>,
+            _is_reload: ::std::os::raw::c_int,
+            callback: Option<&mut JsdialogCallback>,
+        ) -> ::std::os::raw::c_int {
+            // A page with unsaved work asks before it is left. When Free memory asked it to sleep, it stays
+            // awake instead of showing that question from a tab nobody is looking at.
+            let id = browser.map(|b| b.identifier()).unwrap_or(0);
+            let sleeping = browser::sleeping(id, true);
+            match (sleeping, callback) {
+                (true, Some(callback)) => {
+                    callback.cont(0, None);
+                    1
+                }
+                _ => 0,
+            }
         }
     }
 }

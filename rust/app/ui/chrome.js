@@ -10,6 +10,7 @@
   let selected = -1;
   let typedText = "";
   let suggestTimer = 0;
+  let unfoldTimer = 0;
 
   const call = (name, args) => cc.call(name, args).catch(e => console.warn(name, e.message));
   const rectOf = el => { const r = el.getBoundingClientRect(); return { x: Math.round(r.left), y: Math.round(r.top), width: Math.round(r.width), height: Math.round(r.height) }; };
@@ -33,6 +34,8 @@
         el.className = "tab";
         el.dataset.id = id;
         el.setAttribute("role", "tab");
+        el.classList.add("born");
+        el.addEventListener("animationend", () => el.classList.remove("born"), { once: true });
         el.innerHTML = '<span class="fav"></span><span class="snd hidden"></span><span class="title"></span><button class="x" aria-label="Close tab"></button>';
         el.querySelector(".x").innerHTML = cc.icon("x");
         wireTab(el);
@@ -40,8 +43,9 @@
       known.delete(id);
       el.classList.toggle("active", tab.id === state.active);
       el.classList.toggle("pinned", !!tab.pinned);
+      el.classList.toggle("asleep", !!tab.asleep);
       el.setAttribute("aria-selected", tab.id === state.active);
-      el.title = tab.title + (tab.url ? "\n" + tab.url : "");
+      el.title = tab.title + (tab.url ? "\n" + tab.url : "") + (tab.asleep ? "\nAsleep to save memory: loads again when you open it" : "");
       const fav = favicon(tab);
       const favEl = el.querySelector(".fav");
       if (favEl.dataset.html !== fav) { favEl.innerHTML = fav; favEl.dataset.html = fav; }
@@ -75,6 +79,7 @@
           { id: "tab_new_right", label: "New tab to the right", arg: id() },
           { id: "tab_reload", label: "Reload", arg: id() },
           { id: "tab_duplicate", label: "Duplicate", arg: id() },
+          ...(tab && tab.id !== state.active && !tab.asleep ? [{ id: "tab_sleep", label: "Put to sleep (frees its memory)", arg: id() }] : []),
           { id: "tab_pin", label: tab && tab.pinned ? "Unpin" : "Pin", arg: id() },
           { id: "tab_mute", label: tab && tab.muted ? "Unmute site" : "Mute site", arg: id() },
           { sep: true },
@@ -319,6 +324,7 @@
       { sep: true },
       { id: "toggle_bookmarks_bar", label: "Show bookmarks bar", check: !!(state && state.ui.bookmarks_bar), shortcut: "Ctrl+Shift+B" },
       { id: "clear_data", label: "Clear browsing data", shortcut: "Ctrl+Shift+Del" },
+      { id: "free_memory", label: "Free up memory" },
       { id: "open_settings", label: "Settings", shortcut: "Ctrl+," },
       { id: "open_about", label: "About CottonCandy" },
       { sep: true },
@@ -335,7 +341,19 @@
   cc.on("state", s => {
     state = s;
     document.documentElement.dataset.theme = s.ui.theme || "dark";
-    if (vertical) document.body.classList.toggle("folded", !!s.ui.tabs_collapsed);
+    if (vertical) {
+      const body = document.body, was = body.classList.contains("folded");
+      body.classList.toggle("folded", !!s.ui.tabs_collapsed);
+      body.classList.toggle("folding", !!s.ui.tabs_folding);
+      // Unfolding: the names fade in while the list widens.
+      if (was && !s.ui.tabs_collapsed) {
+        body.classList.remove("unfolding");
+        void body.offsetWidth;
+        body.classList.add("unfolding");
+        clearTimeout(unfoldTimer);
+        unfoldTimer = setTimeout(() => body.classList.remove("unfolding"), 400);
+      }
+    }
     renderTabs();
     renderToolbar();
   });

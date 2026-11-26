@@ -9,6 +9,7 @@ mod app;
 mod browser;
 mod cefx;
 mod client;
+mod fetch;
 mod grace;
 mod icon;
 mod scheme;

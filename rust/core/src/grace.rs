@@ -276,6 +276,33 @@ pub fn failure(exit_code: Option<i32>, stderr: &str) -> (&'static str, String) {
     }
 }
 
+/// The percentage at the end of a CherryCola progress line ("pulling 3f2a 42.5%"), if there is one.
+pub fn percent(line: &str) -> Option<f64> {
+    let last = line.split_whitespace().last()?;
+    let n: f64 = last.strip_suffix('%')?.parse().ok()?;
+    (0.0..=100.0).contains(&n).then_some(n)
+}
+
+/// From a release's SHA256SUMS: the file to install on this system and its SHA-256 (lowercase hex).
+/// Windows takes the `-windows-x64-setup.exe`, Linux the `-linux.tar.gz`.
+pub fn pick_asset(sums: &str, windows: bool) -> Option<(String, String)> {
+    sums.lines().find_map(|l| {
+        let (hash, file) = l.split_once(char::is_whitespace)?;
+        let file = file.trim().trim_start_matches('*');
+        let fits = file.starts_with("cherrycolallm-")
+            && if windows {
+                file.ends_with("-windows-x64-setup.exe")
+            } else {
+                file.ends_with("-linux.tar.gz")
+            }
+            && file
+                .chars()
+                .all(|c| c.is_ascii_alphanumeric() || "._-".contains(c));
+        (fits && hash.len() == 64 && hash.chars().all(|c| c.is_ascii_hexdigit()))
+            .then(|| (file.to_string(), hash.to_ascii_lowercase()))
+    })
+}
+
 /// None if every model server CherryCola uses is on this computer, else the first that isn't.
 /// Reads ollama_url, lmstudio_url and llamacpp_url from cherrycola.conf.
 pub fn remote_model_server(conf: &str) -> Option<String> {
@@ -374,6 +401,30 @@ mod tests {
         let (a, s) = split_sources("Answer [1].\n\nSources:\n[1] https://a.test/x\n[2] javascript:alert(1)\n[3] https://b.test/\"x\n");
         assert_eq!(a, "Answer [1].");
         assert_eq!(s, vec![(1, "https://a.test/x".to_string())]);
+    }
+
+    #[test]
+    fn progress_releases_and_checksums() {
+        assert_eq!(percent("pulling 3f2a  42.5%"), Some(42.5));
+        assert_eq!(percent("verifying sha256 digest"), None);
+        let h = "a".repeat(64);
+        let sums = format!("{h}  cherrycolallm-1.0-linux.tar.gz\n{h}  cherrycolallm-1.0-windows-x64-setup.exe\n{h}  cherrycolallm-1.0-windows-x64.zip\n");
+        assert_eq!(
+            pick_asset(&sums, true).unwrap().0,
+            "cherrycolallm-1.0-windows-x64-setup.exe"
+        );
+        assert_eq!(
+            pick_asset(&sums, false),
+            Some(("cherrycolallm-1.0-linux.tar.gz".into(), h.clone()))
+        );
+        assert_eq!(
+            pick_asset("zz  cherrycolallm-1.0-linux.tar.gz", false),
+            None
+        );
+        assert_eq!(
+            pick_asset(&format!("{h}  ../cherrycolallm-x-linux.tar.gz"), false),
+            None
+        );
     }
 
     #[test]

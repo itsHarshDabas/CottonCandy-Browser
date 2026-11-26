@@ -80,7 +80,8 @@ impl TabShared {
 
 pub struct Tab {
     pub id: u32,
-    pub view: BrowserView,
+    /// None while the tab sleeps: keeping the view would keep its page alive.
+    pub view: Option<BrowserView>,
     pub browser: Option<Browser>,
     pub shared: Arc<TabShared>,
     pub url: String,
@@ -96,6 +97,17 @@ pub struct Tab {
     pub muted: bool,
     pub fullscreen: bool,
     pub zoom: i32,
+    /// Put to sleep by Free memory: its page is closed but the tab stays, and loads again when picked.
+    pub asleep: bool,
+}
+
+impl Tab {
+    /// Gives the tab's page the keyboard.
+    pub fn focus(&self) {
+        if let Some(v) = &self.view {
+            v.request_focus();
+        }
+    }
 }
 
 pub struct Popup {
@@ -155,7 +167,98 @@ pub struct Win {
     pub fullscreen: bool,
     /// Folded side tabs are open while the pointer is over them.
     pub vtabs_expanded: bool,
+    /// One counter per sliding panel ([`Slide`]): a newer slide makes the running one stop.
+    pub slides: [u32; 2],
 }
+
+/// A side panel that slides open and shut instead of jumping.
+#[derive(Clone, Copy)]
+pub enum Slide {
+    VTabs = 0,
+    Grace = 1,
+}
+
+/// How long a panel takes to slide, and how often it moves (about one step per frame).
+const SLIDE_MS: f64 = 180.0;
+const FRAME_MS: i64 = 16;
+
+impl Slide {
+    fn width(self, sizes: &Sizes) -> &AtomicI32 {
+        match self {
+            Slide::VTabs => &sizes.vtabs_width,
+            Slide::Grace => &sizes.side_width,
+        }
+    }
+}
+
+/// Slides panel `which` of window `win` to `to` pixels wide over about 180 ms (ease-out), then runs `after`.
+/// With animations turned off it jumps there at once.
+pub fn slide(ui: &mut Ui, win: u32, which: Slide, to: i32, after: fn(&mut Ui, u32)) {
+    let motion = shared::settings().appearance.motion;
+    let Some(w) = ui.win(win) else { return };
+    let i = which as usize;
+    w.slides[i] = w.slides[i].wrapping_add(1);
+    let from = which.width(&w.sizes).load(Ordering::Relaxed);
+    if !motion || from == to {
+        set_slide_width(w, which, to);
+        after(ui, win);
+        return;
+    }
+    let generation = w.slides[i];
+    slide_step(
+        ui,
+        win,
+        which,
+        generation,
+        from,
+        to,
+        std::time::Instant::now(),
+        after,
+    );
+}
+
+#[allow(clippy::too_many_arguments)]
+fn slide_step(
+    ui: &mut Ui,
+    win: u32,
+    which: Slide,
+    generation: u32,
+    from: i32,
+    to: i32,
+    start: std::time::Instant,
+    after: fn(&mut Ui, u32),
+) {
+    let Some(w) = ui.win(win) else { return };
+    if w.slides[which as usize] != generation {
+        return;
+    }
+    let t = (start.elapsed().as_secs_f64() * 1000.0 / SLIDE_MS).min(1.0);
+    let eased = 1.0 - (1.0 - t).powi(3);
+    set_slide_width(w, which, from + ((to - from) as f64 * eased).round() as i32);
+    if t < 1.0 {
+        on_ui_later(FRAME_MS, move || {
+            with(|ui| slide_step(ui, win, which, generation, from, to, start, after))
+        });
+    } else {
+        after(ui, win);
+    }
+}
+
+fn set_slide_width(w: &mut Win, which: Slide, width: i32) {
+    // CEF ignores a preferred size with a 0 side.
+    which.width(&w.sizes).store(width.max(1), Ordering::Relaxed);
+    let view = match which {
+        Slide::VTabs => w.vtabs.as_ref(),
+        Slide::Grace => w.grace.view.as_ref(),
+    };
+    if let Some(v) = view {
+        v.invalidate_layout();
+    }
+    w.window.layout();
+}
+
+/// Grace's panel at full width.
+pub const GRACE_WIDTH: i32 = 400;
 
 fn vtabs_width(settings: &Settings, expanded: bool) -> i32 {
     if settings.appearance.collapse_tabs && !expanded {
@@ -192,6 +295,23 @@ pub struct Ui {
     pub flush_queued: bool,
     pub last_focused: u32,
     pub session_queued: bool,
+}
+
+/// Browsers of tabs being put to sleep: their close keeps the tab (see `free_memory`). Not in `Ui`, because
+/// CEF may ask about a closing browser while the UI state is borrowed.
+pub static SLEEPING: Mutex<Option<std::collections::HashSet<i32>>> = Mutex::new(None);
+
+/// Whether browser `id` is going to sleep; `take` also forgets it.
+pub fn sleeping(id: i32, take: bool) -> bool {
+    let Ok(mut set) = SLEEPING.lock() else {
+        return false;
+    };
+    let set = set.get_or_insert_with(Default::default);
+    if take {
+        set.remove(&id)
+    } else {
+        set.contains(&id)
+    }
 }
 
 thread_local! {
@@ -509,7 +629,7 @@ pub fn open_window(private: bool, urls: Vec<String>) {
         sizes
             .vtabs_width
             .store(vtabs_width(&settings, false), Ordering::Relaxed);
-        sizes.side_width.store(400, Ordering::Relaxed);
+        sizes.side_width.store(GRACE_WIDTH, Ordering::Relaxed);
         let context = if private {
             // An empty cache path keeps everything in memory, gone when the window closes.
             let mut handler = PrivateContext::new();
@@ -614,6 +734,7 @@ pub fn open_window(private: bool, urls: Vec<String>) {
             maximized: false,
             fullscreen: false,
             vtabs_expanded: false,
+            slides: [0; 2],
         });
         ui.last_focused = id;
         let urls = if urls.is_empty() {
@@ -741,7 +862,7 @@ impl Ui {
         w.tabs_host.add_child_view(Some(&mut View::from(&view)));
         let tab = Tab {
             id,
-            view,
+            view: Some(view),
             browser: None,
             shared,
             url: url.to_string(),
@@ -761,6 +882,7 @@ impl Ui {
             muted: false,
             fullscreen: false,
             zoom: shared::settings().appearance.default_zoom as i32,
+            asleep: false,
         };
         let at = index.unwrap_or(w.tabs.len()).min(w.tabs.len());
         w.tabs.insert(at, tab);
@@ -776,8 +898,11 @@ impl Ui {
         if !w.tabs.iter().any(|t| t.id == tab) {
             return;
         }
+        wake(w, win, tab);
         for t in &w.tabs {
-            t.view.set_visible((t.id == tab) as i32);
+            if let Some(v) = &t.view {
+                v.set_visible((t.id == tab) as i32);
+            }
             if let (Some(b), false) = (&t.browser, t.id == tab) {
                 if let Some(host) = b.host() {
                     host.was_hidden(1);
@@ -786,17 +911,115 @@ impl Ui {
         }
         w.active = Some(tab);
         w.tabs_host.layout();
+        let mut newtab = false;
         if let Some(t) = w.tabs.iter().find(|t| t.id == tab) {
             if let Some(host) = t.browser.as_ref().and_then(|b| b.host()) {
                 host.was_hidden(0);
             }
-            if t.url == NEWTAB_URL {
-                focus_address(w, None);
-            } else {
-                t.view.request_focus();
+            newtab = t.url == NEWTAB_URL;
+            if !newtab {
+                t.focus();
             }
         }
         hide_popup(self, win);
+        if newtab {
+            // The toolbar learns the new tab's (empty) address first: the address bar keeps whatever it shows
+            // while it has the keyboard, which would otherwise be the last tab's address, selected.
+            self.push_state(win);
+            if let Some(w) = self.win(win) {
+                focus_address(w, None);
+            }
+        }
+        self.mark(win);
+    }
+
+    /// Frees memory without closing a tab: every tab that isn't showing, playing sound or full screen goes
+    /// to sleep (its page closes, the tab keeps its name, icon and address and loads again when picked), and
+    /// every process is told to drop its caches and collect garbage. A page that asks before it is left
+    /// (unsaved work) stays awake. Returns how many tabs went to sleep.
+    pub fn free_memory(&mut self) -> usize {
+        let mut hosts = Vec::new();
+        for w in &self.windows {
+            for t in &w.tabs {
+                let skip = Some(t.id) == w.active
+                    || t.asleep
+                    || t.audible
+                    || t.fullscreen
+                    || t.url.is_empty();
+                if let (false, Some(b)) = (skip, &t.browser) {
+                    if let Some(host) = b.host() {
+                        hosts.push((b.identifier(), host));
+                    }
+                }
+            }
+        }
+        let count = hosts.len();
+        for (id, host) in hosts {
+            if let Ok(mut set) = SLEEPING.lock() {
+                set.get_or_insert_with(Default::default).insert(id);
+            }
+            host.close_browser(0);
+        }
+        // Chromium's "critical memory pressure": every renderer and the browser process empty their caches
+        // (images, fonts, the memory cache) and run a full garbage collection. Sent through any browser.
+        if let Some(host) = self
+            .windows
+            .iter()
+            .flat_map(|w| w.browsers.values())
+            .find_map(|b| b.host())
+        {
+            if let Some(mut params) = dictionary_value_create() {
+                params.set_string(Some(&cs("level")), Some(&cs("critical")));
+                host.execute_dev_tools_method(
+                    0,
+                    Some(&cs("Memory.simulatePressureNotification")),
+                    Some(&mut params),
+                );
+            }
+        }
+        let ids: Vec<u32> = self.windows.iter().map(|w| w.id).collect();
+        for id in ids {
+            self.mark(id);
+        }
+        count
+    }
+
+    /// Puts one tab to sleep (from its menu). The tab being shown can't sleep.
+    pub fn sleep_tab(&mut self, win: u32, tab: u32) {
+        let Some(w) = self.win(win) else { return };
+        if w.active == Some(tab) {
+            return;
+        }
+        let Some(b) = w
+            .tabs
+            .iter()
+            .find(|t| t.id == tab && !t.asleep)
+            .and_then(|t| t.browser.clone())
+        else {
+            return;
+        };
+        if let Some(host) = b.host() {
+            if let Ok(mut set) = SLEEPING.lock() {
+                set.get_or_insert_with(Default::default)
+                    .insert(b.identifier());
+            }
+            host.close_browser(0);
+        }
+    }
+
+    /// A sleeping tab's page has closed: take its old view out and keep the tab.
+    pub fn tab_slept(&mut self, win: u32, tab: u32) {
+        let Some(w) = self.win(win) else { return };
+        let Some(t) = w.tabs.iter_mut().find(|t| t.id == tab) else {
+            return;
+        };
+        if let Some(v) = t.view.take() {
+            w.tabs_host.remove_child_view(Some(&mut View::from(&v)));
+        }
+        t.browser = None;
+        t.asleep = true;
+        t.loading = false;
+        t.audible = false;
         self.mark(win);
     }
 
@@ -827,8 +1050,9 @@ impl Ui {
             return;
         };
         let t = w.tabs.remove(index);
-        w.tabs_host
-            .remove_child_view(Some(&mut View::from(&t.view)));
+        if let Some(v) = &t.view {
+            w.tabs_host.remove_child_view(Some(&mut View::from(v)));
+        }
         if w.tabs.is_empty() {
             if !w.closing {
                 close_window(&w.window);
@@ -871,7 +1095,7 @@ impl Ui {
             return Ok(());
         };
         load(tab, &url);
-        tab.view.request_focus();
+        tab.focus();
         Ok(())
     }
 
@@ -927,14 +1151,15 @@ impl Ui {
             return;
         }
         w.vtabs_expanded = open;
-        w.sizes
-            .vtabs_width
-            .store(vtabs_width(&settings, open), Ordering::Relaxed);
-        if let Some(v) = &w.vtabs {
-            v.invalidate_layout();
+        let to = vtabs_width(&settings, open);
+        if open {
+            // The names show as the list widens (they fade in, see vtabs.html).
+            self.mark(win);
+            slide(self, win, Slide::VTabs, to, |_, _| {});
+        } else {
+            // The names stay until the list has folded, then the icons center.
+            slide(self, win, Slide::VTabs, to, |ui, win| ui.mark(win));
         }
-        w.window.layout();
-        self.mark(win);
     }
 
     pub fn set_fullscreen(&mut self, win: u32, on: bool) {
@@ -951,6 +1176,34 @@ impl Ui {
         }
         w.window.layout();
     }
+}
+
+/// Wakes a sleeping tab: a new page for it, at the address it had.
+fn wake(w: &mut Win, win: u32, tab: u32) {
+    let context = w.context.clone();
+    let Some(t) = w.tabs.iter_mut().find(|t| t.id == tab && t.asleep) else {
+        return;
+    };
+    // Opening it again is the user's doing, like typing its address.
+    if let Ok(mut typed) = t.shared.typed.lock() {
+        *typed = t.url.clone();
+    }
+    let mut delegate = TabView::new();
+    let Some(view) = create_view(
+        win,
+        Role::Tab(tab),
+        &t.url,
+        context.as_ref(),
+        &mut delegate,
+        Some(t.shared.clone()),
+    ) else {
+        return;
+    };
+    view.set_visible(0);
+    w.tabs_host.add_child_view(Some(&mut View::from(&view)));
+    t.view = Some(view);
+    t.asleep = false;
+    t.loading = true;
 }
 
 /// Loads `url` in a tab, remembering that the user asked for it.
@@ -1001,7 +1254,7 @@ fn window_state(w: &Win, settings: &Settings, downloads: Json) -> Json {
             json!({
                 "id": t.id, "title": t.title, "url": display_url(&t.url), "loading": t.loading,
                 "progress": t.progress, "pinned": t.pinned, "audible": t.audible, "muted": t.muted,
-                "favicon": t.favicon, "internal": t.url.starts_with("cottoncandy:"),
+                "favicon": t.favicon, "internal": t.url.starts_with("cottoncandy:"), "asleep": t.asleep,
             })
         })
         .collect();
@@ -1053,7 +1306,10 @@ fn window_state(w: &Win, settings: &Settings, downloads: Json) -> Json {
         "ui": {
             "theme": resolved_theme(settings),
             "tab_layout": settings.appearance.tab_layout,
-            "tabs_collapsed": settings.appearance.collapse_tabs && !w.vtabs_expanded,
+            // Folding: the names fade out while the list narrows, and the icons center once it has.
+            "tabs_collapsed": settings.appearance.collapse_tabs && !w.vtabs_expanded
+                && w.sizes.vtabs_width.load(Ordering::Relaxed) <= VTABS_COLLAPSED,
+            "tabs_folding": settings.appearance.collapse_tabs && !w.vtabs_expanded,
             "collapse_tabs": settings.appearance.collapse_tabs,
             "bookmarks_bar": settings.appearance.show_bookmarks_bar,
             "home_button": settings.appearance.show_home_button,
@@ -1095,7 +1351,7 @@ const LIGHT_VARS: &str = "color-scheme: light; --bg: #f5f6f8; --bg-2: #eceef2; -
 pub fn theme_css() -> String {
     let settings = shared::settings();
     let a = &settings.appearance;
-    let accent = cottoncandy_core::settings::accent_color(&a.accent);
+    let accent = a.accent_in_use();
     let mut css = format!(
         ":root {{ --accent: {accent}; --accent-soft: color-mix(in srgb, {accent} 18%, transparent); \
          --radius: {}px; --font-size: {}px; }}\n",
@@ -1130,6 +1386,10 @@ fn hide(p: &mut Popup) {
     if p.controller.is_visible() != 0 {
         p.controller.set_visible(0);
         p.kind.clear();
+        // Empty it, so the next menu doesn't flash this one's contents before it draws.
+        if let Some(b) = &p.browser {
+            run_js(b, &emit_js("hidden", &Json::Null));
+        }
     }
 }
 
@@ -1147,7 +1407,7 @@ pub fn hide_popup(ui: &mut Ui, win: u32) {
         w.window.activate();
         let active = w.active;
         if let Some(t) = w.tabs.iter().find(|t| Some(t.id) == active) {
-            t.view.request_focus();
+            t.focus();
         }
     }
 }
@@ -1191,8 +1451,9 @@ fn reveal(p: &mut Popup) {
     let (Some(data), Some(b)) = (p.pending.take(), &p.browser) else {
         return;
     };
-    p.controller.set_visible(1);
+    // The page gets its contents before the popup shows, so it rarely shows a blank frame first.
     run_js(b, &emit_js("show", &data));
+    p.controller.set_visible(1);
     if p.kind != "suggest" {
         if let Some(view) = p.controller.contents_view() {
             view.request_focus();

@@ -70,6 +70,14 @@ pub fn allowed(host: &str, cmd: &str) -> bool {
             "clear_data",
             "restart",
             "about",
+            "grace_models",
+            "grace_use",
+            "grace_pull",
+            "grace_install",
+            "pick_wallpaper",
+            "wallpaper_from_link",
+            "free_memory",
+            "open_gpu_report",
         ],
         "error" => &["error_retry", "nav"],
         "grace" => &[
@@ -78,6 +86,10 @@ pub fn allowed(host: &str, cmd: &str) -> bool {
             "grace_page",
             "grace_chat",
             "grace_stop",
+            "grace_models",
+            "grace_use",
+            "grace_pull",
+            "grace_install",
             "navigate",
         ],
         "about" => &["about"],
@@ -115,12 +127,12 @@ pub fn dispatch(cmd: &str, args: &Json, browser_id: i32, from_host: &str) -> Res
             None if matches!(cmd, "ready" | "grace_ready") => return Err("starting".into()),
             None => (ui.focused().map(|w| w.id).ok_or("no window")?, Role::Tab(0)),
         };
+        if cmd.starts_with("grace_") {
+            return crate::grace::call(ui, win, browser_id, cmd, args);
+        }
         let settings_call = from_host == "settings" && cmd != "about";
         if settings_call || matches!(cmd, "bookmarks_import" | "bookmarks_export") {
             return crate::settings_api::call(ui, browser_id, cmd, args);
-        }
-        if cmd.starts_with("grace_") {
-            return crate::grace::call(ui, win, browser_id, cmd, args);
         }
         call(ui, win, role, cmd, args, from_host)
     })
@@ -325,7 +337,7 @@ fn call(ui: &mut Ui, win: u32, role: Role, cmd: &str, args: &Json, from_host: &s
         }
         "focus_page" => {
             if let Some(t) = ui.active_tab(win) {
-                t.view.request_focus();
+                t.focus();
             }
             Ok(json!({}))
         }
@@ -686,6 +698,9 @@ fn newtab_info(ui: &mut Ui, win: u32) -> Res {
     Ok(json!({
         "private": private,
         "background": a.newtab_background,
+        // Changes with each new picture, so the page never shows an old one from its cache.
+        "wallpaper_version": std::path::Path::new(&a.wallpaper_path).file_name().map(|n| n.to_string_lossy().into_owned()),
+        "adaptive": a.adaptive_accent,
         "show_clock": a.newtab_show_clock,
         "show_shortcuts": a.newtab_show_shortcuts,
         "tiles": tiles,
@@ -798,6 +813,35 @@ pub fn command(ui: &mut Ui, win: u32, id: &str, arg: &Json) -> Res {
                 }
             }
             ui.mark(win);
+        }
+        "free_memory" => {
+            // The menu's own spot, so the result shows where the user just clicked.
+            let at = ui
+                .win(win)
+                .and_then(|w| w.popup.as_ref())
+                .map(|p| p.rect.clone());
+            let slept = ui.free_memory();
+            let text = match slept {
+                0 => "Cleared memory caches. No other tab could sleep.".to_string(),
+                1 => "Put 1 tab to sleep and cleared memory caches. It loads again when you open it.".to_string(),
+                n => format!("Put {n} tabs to sleep and cleared memory caches. They load again when you open them."),
+            };
+            if let Some(r) = at {
+                let r = rect(r.x, r.y, r.width.max(280), 60);
+                show_popup(
+                    ui,
+                    win,
+                    "notice",
+                    r,
+                    json!({"kind": "notice", "text": text}),
+                );
+            }
+            return Ok(json!({ "slept": slept, "text": text }));
+        }
+        "tab_sleep" => {
+            if let Some(t) = tab_arg {
+                ui.sleep_tab(win, t);
+            }
         }
         "tab_reload" => {
             if let Some(b) = tab_arg

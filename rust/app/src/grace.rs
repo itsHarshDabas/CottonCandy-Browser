@@ -36,8 +36,65 @@ static RUNS: Mutex<Runs> = Mutex::new(Vec::new());
 /// `cherrycola ask --help`, checked once per command: None if it isn't installed.
 static FEATURES: Mutex<Option<(String, Option<g::Features>)>> = Mutex::new(None);
 
+/// The CherryCola command to run. A bare name that isn't on PATH falls back to where Grace's own installer
+/// puts it: a CherryColaLLM installed a moment ago isn't on this process's PATH yet.
 fn command() -> String {
-    shared::settings().grace.command
+    let cmd = shared::settings().grace.command;
+    if cmd.contains(['/', '\\']) || on_path(&cmd) {
+        return cmd;
+    }
+    installed_command()
+        .filter(|p| p.is_file())
+        .map(|p| p.to_string_lossy().into_owned())
+        .unwrap_or(cmd)
+}
+
+fn on_path(name: &str) -> bool {
+    let Some(path) = std::env::var_os("PATH") else {
+        return false;
+    };
+    let names: Vec<String> = if cfg!(windows) {
+        vec![
+            format!("{name}.exe"),
+            format!("{name}.cmd"),
+            format!("{name}.bat"),
+            name.to_string(),
+        ]
+    } else {
+        vec![name.to_string()]
+    };
+    std::env::split_paths(&path).any(|dir| names.iter().any(|n| dir.join(n).is_file()))
+}
+
+/// Where Grace's installer puts CherryColaLLM's command.
+fn installed_command() -> Option<std::path::PathBuf> {
+    if cfg!(windows) {
+        let local = std::env::var_os("LOCALAPPDATA")?;
+        Some(
+            std::path::PathBuf::from(local)
+                .join("Programs")
+                .join("CherryColaLLM")
+                .join("cherrycola.exe"),
+        )
+    } else {
+        Some(
+            linux_install_dir()
+                .join("usr")
+                .join("bin")
+                .join("cherrycola"),
+        )
+    }
+}
+
+fn linux_install_dir() -> std::path::PathBuf {
+    cottoncandy_core::paths::data_dir().join("cherrycolallm")
+}
+
+/// Forgets what CherryCola can do, so the next question checks again (after installing it).
+fn rescan() {
+    if let Ok(mut cached) = FEATURES.lock() {
+        *cached = None;
+    }
 }
 
 /// What the installed CherryCola can do. Runs `cherrycola ask --help` the first time (well under a second).
@@ -310,18 +367,42 @@ pub fn toggle(ui: &mut Ui, win: u32, open: Option<bool>) {
         w.grace.view = Some(view);
     }
     w.grace.open = open;
-    if let Some(v) = &w.grace.view {
-        v.set_visible((open && !w.fullscreen) as i32);
-        if open {
+    if open {
+        if let Some(v) = &w.grace.view {
+            if v.is_visible() == 0 {
+                // It slides in from the right edge (or carries on from where a closing slide got to).
+                w.sizes.side_width.store(1, Ordering::Relaxed);
+            }
+            v.set_visible((!w.fullscreen) as i32);
             v.request_focus();
         }
-    }
-    if !open {
+        w.window.layout();
+        browser::slide(
+            ui,
+            win,
+            browser::Slide::Grace,
+            browser::GRACE_WIDTH,
+            |_, _| {},
+        );
+    } else {
         if let Some(tab) = w.active.and_then(|id| w.tabs.iter().find(|t| t.id == id)) {
-            tab.view.request_focus();
+            tab.focus();
         }
+        // It slides out, then hides (unless it was opened again meanwhile).
+        browser::slide(ui, win, browser::Slide::Grace, 1, |ui, win| {
+            if let Some(w) = ui.win(win) {
+                if !w.grace.open {
+                    if let Some(v) = &w.grace.view {
+                        v.set_visible(0);
+                    }
+                    w.sizes
+                        .side_width
+                        .store(browser::GRACE_WIDTH, Ordering::Relaxed);
+                    w.window.layout();
+                }
+            }
+        });
     }
-    w.window.layout();
     ui.mark(win);
 }
 
@@ -646,6 +727,10 @@ pub fn call(ui: &mut Ui, win: u32, browser_id: i32, cmd: &str, args: &Json) -> R
         ),
         "grace_enhance" => enhance(browser_id, args),
         "grace_stop" => stop(browser_id, args),
+        "grace_models" => models(browser_id),
+        "grace_use" => use_model(browser_id, args),
+        "grace_pull" => pull(browser_id, args),
+        "grace_install" => install(browser_id),
         _ => Err(format!("unknown call {cmd}")),
     }
 }
@@ -658,6 +743,313 @@ pub fn offered() -> bool {
             .ok()
             .and_then(|f| f.as_ref().map(|(_, f)| f.is_some()))
             .unwrap_or(false)
+}
+
+// ---- models (Settings, Grace) ----------------------------------------------------------------------
+
+/// A model name or download as CherryCola takes it: an Ollama tag, OWNER/REPO:QUANT or an https link.
+/// Never starts with "-", so it can't be read as an option.
+fn model_name(args: &Json) -> Result<String, String> {
+    let m = args
+        .get("model")
+        .and_then(Json::as_str)
+        .unwrap_or("")
+        .trim();
+    let ok = !m.is_empty()
+        && m.len() <= 300
+        && !m.starts_with('-')
+        && m.chars()
+            .all(|c| c.is_ascii_alphanumeric() || "._:/-@+".contains(c));
+    ok.then(|| m.to_string())
+        .ok_or_else(|| "That isn't a model name.".into())
+}
+
+/// Runs CherryCola, returning what it printed, or its last error line.
+fn run_checked(args: &[&str]) -> Result<String, String> {
+    let out = base_command(&command())
+        .args(args)
+        .stdin(Stdio::null())
+        .output()
+        .map_err(|_| g::failure(None, "").1)?;
+    if out.status.success() {
+        Ok(String::from_utf8_lossy(&out.stdout).into_owned())
+    } else {
+        Err(g::failure(out.status.code(), &String::from_utf8_lossy(&out.stderr)).1)
+    }
+}
+
+/// Which models are installed and which is in use, and what suits this computer. Answers with a
+/// `grace_models` event, since CherryCola can take a second or two.
+fn models(browser_id: i32) -> Res {
+    std::thread::spawn(move || {
+        if features().is_none() {
+            emit(
+                browser_id,
+                "grace_models",
+                json!({ "installed": false, "message": g::failure(None, "").1 }),
+            );
+            return;
+        }
+        let status = run_checked(&["status", "--json"])
+            .and_then(|o| serde_json::from_str::<Json>(&o).map_err(|e| e.to_string()));
+        let recommend = run_checked(&["recommend", "--json"])
+            .ok()
+            .and_then(|o| serde_json::from_str::<Json>(&o).ok());
+        let data = match status {
+            Ok(st) => json!({ "installed": true, "status": st, "recommend": recommend }),
+            Err(e) => json!({ "installed": true, "message": e, "recommend": recommend }),
+        };
+        emit(browser_id, "grace_models", data);
+    });
+    Ok(json!({}))
+}
+
+fn use_model(browser_id: i32, args: &Json) -> Res {
+    let model = model_name(args)?;
+    std::thread::spawn(move || {
+        let result = run_checked(&["use", &model]);
+        if let Err(e) = result {
+            emit(
+                browser_id,
+                "grace_models",
+                json!({ "installed": true, "message": e }),
+            );
+            return;
+        }
+        let _ = models(browser_id);
+    });
+    Ok(json!({}))
+}
+
+static PULLING: Mutex<Option<String>> = Mutex::new(None);
+
+/// Downloads a model through CherryCola's engine and makes it the one Grace uses. Progress comes as
+/// `grace_pull` events ({model, status, percent}); the last has `done` or `error`.
+fn pull(browser_id: i32, args: &Json) -> Res {
+    let model = model_name(args)?;
+    {
+        let mut pulling = PULLING.lock().map_err(|_| "busy")?;
+        if let Some(other) = pulling.as_ref() {
+            return Err(format!("{other} is still downloading."));
+        }
+        *pulling = Some(model.clone());
+    }
+    let cmd = command();
+    std::thread::spawn(move || {
+        let result = pull_run(&cmd, &model, browser_id);
+        if let Ok(mut p) = PULLING.lock() {
+            *p = None;
+        }
+        match result {
+            Ok(()) => emit(
+                browser_id,
+                "grace_pull",
+                json!({ "model": model, "done": true }),
+            ),
+            Err(e) => emit(
+                browser_id,
+                "grace_pull",
+                json!({ "model": model, "error": e }),
+            ),
+        }
+        let _ = models(browser_id);
+    });
+    Ok(json!({}))
+}
+
+fn pull_run(cmd: &str, model: &str, browser_id: i32) -> Result<(), String> {
+    let mut child = base_command(cmd)
+        .args(["pull", model, "--use"])
+        .stdin(Stdio::null())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+        .map_err(|_| g::failure(None, "").1)?;
+    let mut err = child.stderr.take().ok_or("no output")?;
+    let err_reader = std::thread::spawn(move || {
+        let mut text = String::new();
+        let _ = err
+            .by_ref()
+            .take(STDERR_LIMIT as u64)
+            .read_to_string(&mut text);
+        text
+    });
+    // CherryCola writes "\r<status> 42.0%" as it goes; send the newest line now and then.
+    let mut out = child.stdout.take().ok_or("no output")?;
+    let mut buf = [0u8; 4096];
+    let mut line = String::new();
+    let mut last = Instant::now() - STREAM_EVERY;
+    loop {
+        let n = out.read(&mut buf).unwrap_or(0);
+        if n == 0 {
+            break;
+        }
+        for c in String::from_utf8_lossy(&buf[..n]).chars() {
+            if c == '\r' || c == '\n' {
+                if !line.trim().is_empty() && last.elapsed() >= STREAM_EVERY {
+                    last = Instant::now();
+                    let text = strip_ansi(line.trim());
+                    emit(
+                        browser_id,
+                        "grace_pull",
+                        json!({ "model": model, "status": text, "percent": g::percent(&text) }),
+                    );
+                }
+                line.clear();
+            } else if line.len() < 400 {
+                line.push(c);
+            }
+        }
+    }
+    let status = child.wait().map_err(|e| e.to_string())?;
+    let err = err_reader.join().unwrap_or_default();
+    if status.success() {
+        Ok(())
+    } else {
+        Err(g::failure(status.code(), &err).1)
+    }
+}
+
+// ---- installing CherryColaLLM (the Grace panel's Download button) -----------------------------------
+
+/// The newest release's files, through GitHub's plain download links (no API, so no API rate limit).
+const LATEST: &str = "https://github.com/itsHarshDabas/CherryColaLLM/releases/latest/download/";
+static INSTALLING: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+
+fn install_progress(browser_id: i32, step: &str, percent: Option<f64>) {
+    emit(
+        browser_id,
+        "grace_install",
+        json!({ "step": step, "percent": percent }),
+    );
+}
+
+fn install_failed(browser_id: i32, e: String) {
+    INSTALLING.store(false, Ordering::SeqCst);
+    emit(browser_id, "grace_install", json!({ "error": e }));
+}
+
+/// Downloads CherryColaLLM's newest release from its GitHub page, checks it against the release's
+/// SHA256SUMS, and installs it for this user only (no administrator): the Windows installer runs quietly
+/// into %LOCALAPPDATA%\Programs\CherryColaLLM; on Linux the files go into CottonCandy's data folder.
+/// Progress comes as `grace_install` events; the last has `done` or `error`.
+fn install(browser_id: i32) -> Res {
+    if INSTALLING.swap(true, Ordering::SeqCst) {
+        return Err("CherryColaLLM is already being installed.".into());
+    }
+    install_progress(browser_id, "Finding the newest CherryColaLLM", None);
+    crate::fetch::get(
+        &format!("{LATEST}SHA256SUMS"),
+        "",
+        64 * 1024,
+        None,
+        move |r| {
+            let sums = match r {
+                Ok(f) => String::from_utf8_lossy(&f.body).into_owned(),
+                Err(e) => return install_failed(browser_id, e),
+            };
+            let Some((name, want)) = g::pick_asset(&sums, cfg!(windows)) else {
+                return install_failed(
+                    browser_id,
+                    "The newest CherryColaLLM release has no file for this computer.".into(),
+                );
+            };
+            install_progress(browser_id, &format!("Downloading {name}"), Some(0.0));
+            let progress: Arc<dyn Fn(i64, i64) + Send + Sync> = Arc::new(move |done, total| {
+                if total > 0 {
+                    install_progress(
+                        browser_id,
+                        "Downloading",
+                        Some(100.0 * done as f64 / total as f64),
+                    );
+                }
+            });
+            crate::fetch::get(
+                &format!("{LATEST}{name}"),
+                "",
+                300 << 20,
+                Some(progress),
+                move |r| match r {
+                    Err(e) => install_failed(browser_id, e),
+                    Ok(f) => {
+                        let got = ring::digest::digest(&ring::digest::SHA256, &f.body);
+                        let got: String = got.as_ref().iter().map(|b| format!("{b:02x}")).collect();
+                        if got != want {
+                            return install_failed(browser_id, "The download doesn't match the release's checksum, so it wasn't installed.".into());
+                        }
+                        install_progress(browser_id, "Installing", None);
+                        std::thread::spawn(move || {
+                            let result = install_file(&name, &f.body);
+                            INSTALLING.store(false, Ordering::SeqCst);
+                            rescan();
+                            match result {
+                                Ok(()) if features().is_some() => {
+                                    emit(browser_id, "grace_install", json!({ "done": true }))
+                                }
+                                Ok(()) => emit(
+                                    browser_id,
+                                    "grace_install",
+                                    json!({ "error": "CherryColaLLM was installed but doesn't start. On Linux it needs Python 3." }),
+                                ),
+                                Err(e) => emit(browser_id, "grace_install", json!({ "error": e })),
+                            }
+                        });
+                    }
+                },
+            );
+        },
+    );
+    Ok(json!({}))
+}
+
+#[cfg(windows)]
+fn install_file(name: &str, data: &[u8]) -> Result<(), String> {
+    let dir = shared::get().cache_dir.join("cherrycolallm");
+    std::fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
+    let setup = dir.join(name);
+    std::fs::write(&setup, data).map_err(|e| e.to_string())?;
+    // Inno Setup: a small progress window and no questions; per-user, so no administrator prompt.
+    let status = base_command(&setup.to_string_lossy())
+        .args(["/SILENT", "/SUPPRESSMSGBOXES", "/NORESTART", "/SP-"])
+        .status()
+        .map_err(|e| format!("The installer didn't start: {e}"))?;
+    let _ = std::fs::remove_file(&setup);
+    if status.success() {
+        Ok(())
+    } else {
+        Err(format!(
+            "The installer stopped (code {}).",
+            status.code().unwrap_or(-1)
+        ))
+    }
+}
+
+#[cfg(not(windows))]
+fn install_file(name: &str, data: &[u8]) -> Result<(), String> {
+    let dir = linux_install_dir();
+    let unpack = dir.with_extension("new");
+    let _ = std::fs::remove_dir_all(&unpack);
+    std::fs::create_dir_all(&unpack).map_err(|e| e.to_string())?;
+    let archive = unpack.join(name);
+    std::fs::write(&archive, data).map_err(|e| e.to_string())?;
+    // GNU tar refuses names with ".." or a leading "/" unless told otherwise.
+    let status = Command::new("tar")
+        .arg("-xzf")
+        .arg(&archive)
+        .arg("-C")
+        .arg(&unpack)
+        .arg("--strip-components=1")
+        .arg("--no-same-owner")
+        .status()
+        .map_err(|e| format!("Couldn't unpack it: {e}"))?;
+    let _ = std::fs::remove_file(&archive);
+    if !status.success() || !unpack.join("usr/bin/cherrycola").exists() {
+        let _ = std::fs::remove_dir_all(&unpack);
+        return Err("The download didn't unpack as expected.".into());
+    }
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::rename(&unpack, &dir).map_err(|e| e.to_string())?;
+    Ok(())
 }
 
 #[cfg(test)]

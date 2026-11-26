@@ -120,6 +120,14 @@ cottoncandy --set-default    # optional
 
 **Import** from another browser in Settings → Import from another browser. It finds Chrome, Edge, Brave, Vivaldi, Opera, Chromium and Firefox profiles on Linux (including Flatpak and Snap) and Windows, and brings over bookmarks, history, open tabs and, if you like, extensions (installed again from their stores). It only reads the other browser's files. Passwords and cookies stay behind, because each browser encrypts them with its own key.
 
+**Free up memory** (main menu, or Settings → Performance) puts every tab you aren't looking at to sleep and tells every page to drop its caches. No tab closes: a sleeping tab keeps its name, icon and address, shows a dimmed icon, and loads again when you open it (its back and forward history starts over). Tabs playing sound, in full screen, or asking before you leave (unsaved work) stay awake. A single tab can sleep from its right-click menu.
+
+**Graphics** (Settings → Performance, after a restart): the graphics card is used by default; you can turn it off for a driver that draws garbage, or use it even on a driver Chromium distrusts (Chromium otherwise draws with the processor there, which makes WebGL, video and scrolling slow). "Graphics report" opens `chrome://gpu`, which says what is drawn on the GPU. Smooth scrolling is on by default on Windows and Linux. The browser's own panels slide and fade (side tabs, Grace, menus, pages); Settings → Appearance → Animations, or the system's reduce-motion setting, turns that off.
+
+**Grace models** (Settings → Grace → Model): pick the model Grace uses from the ones CherryColaLLM has, download one of the models that suit this computer (or any Ollama name, Hugging Face GGUF or .gguf link) with progress, and see whether the model engine is running. Without CherryColaLLM, the Grace panel offers to download it: it gets the newest release from GitHub, checks it against the release's `SHA256SUMS`, and installs it for you alone (no administrator): on Windows the installer runs quietly into `%LOCALAPPDATA%\Programs\CherryColaLLM`, on Linux the files go into CottonCandy's data folder (it needs Python 3).
+
+**New tab picture** (Settings → New tab page → Image): choose a picture on this computer or paste an https link to one. Either way a copy is kept in CottonCandy's data folder, so the page never loads it from the site. With "Colors from the picture" on, the accent color comes from the picture, and the clock, search box and shortcuts switch between light and dark text to stay readable on it.
+
 **Build** it yourself with Rust 1.85 or later, CMake and Ninja:
 
 ```sh

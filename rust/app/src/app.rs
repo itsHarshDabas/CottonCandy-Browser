@@ -46,6 +46,19 @@ wrap_app! {
                 features += ",WebContentsForceDark";
             }
             value("enable-features", &features);
+            let perf = &settings.performance;
+            if !perf.hardware_acceleration {
+                // Only for a graphics driver that crashes or draws garbage: everything is drawn by the processor.
+                switch("disable-gpu");
+                switch("disable-gpu-compositing");
+            } else if perf.ignore_gpu_blocklist {
+                // Chromium keeps a list of drivers it doesn't trust and draws with the processor on them, which
+                // makes WebGL, video and scrolling slow. This uses the graphics card anyway.
+                switch("ignore-gpu-blocklist");
+                switch("enable-gpu-rasterization");
+            }
+            // Chromium glides on Windows but jumps on Linux unless asked; this makes both follow the setting.
+            switch(if perf.smooth_scrolling { "enable-smooth-scrolling" } else { "disable-smooth-scrolling" });
             if settings.privacy.webrtc_ip_policy != "default" {
                 value("force-webrtc-ip-handling-policy", &settings.privacy.webrtc_ip_policy);
             }

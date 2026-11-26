@@ -42,7 +42,7 @@
     clock: "M12 7v5l3 2M12 21a9 9 0 1 1 0-18 9 9 0 0 1 0 18z", puzzle: "M10 4a2 2 0 0 1 4 0v2h4v4h-2a2 2 0 0 0 0 4h2v4h-4v-2a2 2 0 0 0-4 0v2H6v-4h2a2 2 0 0 0 0-4H6V6h4z",
     vpn: "M12 3l7 3v5c0 4.5-3 8.3-7 10-4-1.7-7-5.5-7-10V6zM9 12l2 2 4-4", min: "M6 12h12", max: "M6 6h12v12H6z", home: "M4 11l8-7 8 7v9h-5v-6H9v6H4z",
     audio: "M5 10v4h3l5 4V6L8 10zM16 9a4 4 0 0 1 0 6", muted: "M5 10v4h3l5 4V6L8 10zM17 9l4 6M21 9l-4 6", pin: "M15 4l5 5-3 1-4 4 1 5-2 1-3-4-5 5M9 15l-3-3 1-2 5 1 4-4 1-3",
-    tabs: "M4 6h16v14H4zM4 10h16", sidebar: "M4 5h16v14H4zM15 5v14", copy: "M8 8h11v12H8zM5 16V4h11",
+    bolt: "M13 3L5 14h6l-1 7 8-11h-6z", tabs: "M4 6h16v14H4zM4 10h16", sidebar: "M4 5h16v14H4zM15 5v14", copy: "M8 8h11v12H8zM5 16V4h11",
     code: "M9 7l-5 5 5 5M15 7l5 5-5 5", script: "M8 4h9l3 3v13H8zM4 8v12h4", eye: "M2 12s4-7 10-7 10 7 10 7-4 7-10 7S2 12 2 12zM12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6z",
   };
   window.addEventListener("keydown", e => { if (e.key === "F5" || (e.ctrlKey && e.key === "r")) e.preventDefault(); }, true);
