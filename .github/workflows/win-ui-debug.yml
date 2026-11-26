@@ -46,6 +46,7 @@ jobs:
       - name: Run it and look
         run: |
           cd tools/win-debug; npm i --silent playwright-core@1.49.1; cd ../..
+          ./tools/win-debug/control.ps1
           $env:CC_DEBUG = "1"; $env:CC_DEBUG_PORT = "9222"
           $p = Start-Process $env:EXE -PassThru -RedirectStandardOutput out\stdout.txt -RedirectStandardError out\stderr.txt
           Start-Sleep 20
@@ -55,11 +56,11 @@ jobs:
           # Real mouse and keyboard: click the middle of the window (the new tab's search box) and type.
           Add-Type -AssemblyName System.Windows.Forms
           $b = [System.Windows.Forms.Screen]::PrimaryScreen.Bounds
-          Add-Type -AssemblyName System.Windows.Forms; [System.Windows.Forms.SendKeys]::SendWait("hello typed")
+          Add-Type -AssemblyName System.Windows.Forms; foreach ($c in "hello".ToCharArray()) { [System.Windows.Forms.SendKeys]::SendWait("$c"); Start-Sleep -Milliseconds 150 }
           Start-Sleep 2
           node tools/win-debug/values.js
           ./tools/win-debug/shot.ps1 -Path out\3-typed-in-page.png
-          [System.Windows.Forms.SendKeys]::SendWait("{ESC}^l"); Start-Sleep 1; [System.Windows.Forms.SendKeys]::SendWait("example.org")
+          [System.Windows.Forms.SendKeys]::SendWait("{ESC}^l"); Start-Sleep 1; foreach ($c in "example".ToCharArray()) { [System.Windows.Forms.SendKeys]::SendWait("$c"); Start-Sleep -Milliseconds 150 }
           Start-Sleep 2
           node tools/win-debug/values.js
           ./tools/win-debug/shot.ps1 -Path out\4-typed-in-toolbar.png
