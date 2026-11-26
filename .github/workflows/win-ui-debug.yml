@@ -56,15 +56,21 @@ jobs:
           # Real mouse and keyboard: click the middle of the window (the new tab's search box) and type.
           Add-Type -AssemblyName System.Windows.Forms
           $b = [System.Windows.Forms.Screen]::PrimaryScreen.Bounds
+          ./tools/win-debug/focus.ps1 startup
           node tools/win-debug/listen.js start
           Add-Type -AssemblyName System.Windows.Forms; foreach ($c in "hello".ToCharArray()) { [System.Windows.Forms.SendKeys]::SendWait("$c"); Start-Sleep -Milliseconds 150 }
           Start-Sleep 2
+          ./tools/win-debug/focus.ps1 after-hello
           node tools/win-debug/values.js
           node tools/win-debug/listen.js read
+          [System.Windows.Forms.SendKeys]::SendWait("{ESC}"); Start-Sleep 1
+          [System.Windows.Forms.SendKeys]::SendWait("^l"); Start-Sleep 2
+          ./tools/win-debug/focus.ps1 after-ctrl-l
+          node tools/win-debug/values.js
           node tools/win-debug/listen.js start
-          ./tools/win-debug/shot.ps1 -Path out\3-typed-in-page.png
-          [System.Windows.Forms.SendKeys]::SendWait("{ESC}^l"); Start-Sleep 1; foreach ($c in "example".ToCharArray()) { [System.Windows.Forms.SendKeys]::SendWait("$c"); Start-Sleep -Milliseconds 150 }
+          foreach ($c in "example".ToCharArray()) { [System.Windows.Forms.SendKeys]::SendWait("$c"); Start-Sleep -Milliseconds 150 }
           Start-Sleep 2
+          ./tools/win-debug/focus.ps1 after-example
           node tools/win-debug/values.js
           node tools/win-debug/listen.js read
           ./tools/win-debug/shot.ps1 -Path out\4-typed-in-toolbar.png

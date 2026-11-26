@@ -767,6 +767,9 @@ wrap_focus_handler! {
 
     impl FocusHandler {
         fn on_got_focus(&self, _browser: Option<&mut Browser>) {
+            if std::env::var_os("CC_DEBUG").is_some() {
+                eprintln!("[focus] {:?} got focus", self.ctx.role);
+            }
             if matches!(self.ctx.role, Role::Tab(_)) {
                 let win = self.ctx.win;
                 later(move |ui| browser::hide_popup(ui, win));
