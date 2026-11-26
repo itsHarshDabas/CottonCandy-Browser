@@ -159,6 +159,11 @@ fn call(ui: &mut Ui, win: u32, role: Role, cmd: &str, args: &Json, from_host: &s
                     browser::popup_ready(w, role == Role::Suggest);
                 }
             }
+            // The tab strip and toolbar listen only once their script has run, so a state sent while
+            // the page was still loading was lost: send it again now (an empty tab strip on Windows).
+            if matches!(role, Role::Chrome | Role::VTabs) {
+                ui.mark(win);
+            }
             Ok(json!({}))
         }
         "tab_new" => {
