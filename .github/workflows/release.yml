@@ -1,17 +1,25 @@
 name: release
 # Pushing a tag like v1.0.0 (or v1.0-beta) builds CottonCandy for Linux and Windows, plus the Windows installer, measures its startup time and memory
 # against Google Chrome on the same runner, and publishes a GitHub release with both packages, SHA256SUMS and
-# the measured numbers. On a pull request that changes it, or run by hand, it does everything except publish.
+# the measured numbers. Run by hand with a tag (Actions → release → Run workflow), it does the same and creates
+# the tag. On a pull request that changes it, or run by hand without a tag, it does everything except publish.
 on:
   push:
     tags: ["v*"]
   pull_request:
     paths: [".github/workflows/release.yml", "rust/bench/**", "rust/installer/**"]
   workflow_dispatch:
+    inputs:
+      tag:
+        description: "Release tag to create and publish from this commit, like v1.0-beta (empty: build only)"
+        type: string
+        default: ""
 permissions:
   contents: write
 env:
   CARGO_TERM_COLOR: always
+  # The release being made: a pushed tag, or the tag asked for when run by hand.
+  RELEASE_TAG: ${{ github.ref_type == 'tag' && github.ref_name || inputs.tag }}
   CEF_VERSION: "156.7.0+156.0.31"
 jobs:
   build:
@@ -59,8 +67,8 @@ jobs:
           version=$(cargo metadata --no-deps --format-version 1 | python3 -c "import json,sys; print(next(p['version'] for p in json.load(sys.stdin)['packages'] if p['name'] == 'cottoncandy'))")
           # The tag may leave out a zero patch number: v1.0-beta for 1.0.0-beta.
           short=$(echo "$version" | sed -E 's/^([0-9]+\.[0-9]+)\.0($|-)/\1\2/')
-          if [ "$GITHUB_REF_TYPE" = tag ] && [ "$GITHUB_REF_NAME" != "v$version" ] && [ "$GITHUB_REF_NAME" != "v$short" ]; then
-            echo "The tag $GITHUB_REF_NAME doesn't match the version in rust/Cargo.toml ($version)." >&2
+          if [ -n "$RELEASE_TAG" ] && [ "$RELEASE_TAG" != "v$version" ] && [ "$RELEASE_TAG" != "v$short" ]; then
+            echo "The tag $RELEASE_TAG doesn't match the version in rust/Cargo.toml ($version)." >&2
             exit 1
           fi
           echo "version=$version" >> "$GITHUB_OUTPUT"
@@ -171,7 +179,7 @@ jobs:
 
   release:
     needs: [build, bench]
-    if: github.ref_type == 'tag'
+    if: github.ref_type == 'tag' || inputs.tag != ''
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
@@ -185,7 +193,7 @@ jobs:
           find artifacts \( -name '*.tar.xz' -o -name '*.zip' -o -name '*.exe' \) -exec mv {} out/ \;
           (cd out && sha256sum * > SHA256SUMS)
           cat > notes.md <<EOF
-          CottonCandy ${GITHUB_REF_NAME}, the GraceOS web browser on Chromium (CEF ${CEF_VERSION%%+*}), for Linux and Windows.
+          CottonCandy ${RELEASE_TAG}, the GraceOS web browser on Chromium (CEF ${CEF_VERSION%%+*}), for Linux and Windows.
 
           ## Install
           - **Windows:** run \`CottonCandy-Setup-*.exe\`. It installs for you alone (no administrator needed) into
@@ -205,5 +213,6 @@ jobs:
           See \`rust/bench/bench.py\` to measure it yourself.
           EOF
           pre=""
-          case "$GITHUB_REF_NAME" in *-*) pre="--prerelease" ;; esac
-          gh release create "$GITHUB_REF_NAME" $pre --title "CottonCandy $GITHUB_REF_NAME" --notes-file notes.md out/*
+          case "$RELEASE_TAG" in *-*) pre="--prerelease" ;; esac
+          # Creates the tag at this commit when the release was asked for by hand.
+          gh release create "$RELEASE_TAG" $pre --target "$GITHUB_SHA" --title "CottonCandy $RELEASE_TAG" --notes-file notes.md out/*
