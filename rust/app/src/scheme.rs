@@ -224,6 +224,9 @@ wrap_resource_handler! {
             // you've been). Opening one of our pages as a page is fine: on_before_browse already vetted that.
             let from_internal = self.frame_url.starts_with(&format!("{}://", cottoncandy_core::INTERNAL_SCHEME));
             let navigation = request.resource_type() == ResourceType::MAIN_FRAME;
+            if std::env::var_os("CC_DEBUG").is_some() {
+                eprintln!("[scheme] open {} frame={:?} nav={navigation} method={method}", url, self.frame_url);
+            }
             if !(from_internal || navigation) {
                 *handle_request = 1;
                 *self.reply.lock().unwrap() = Reply::not_found();
@@ -286,6 +289,9 @@ wrap_resource_handler! {
             _redirect_url: Option<&mut CefString>,
         ) {
             let reply = self.reply.lock().unwrap();
+            if std::env::var_os("CC_DEBUG").is_some() {
+                eprintln!("[scheme] headers status={} mime={:?} len={}", reply.status, reply.mime, reply.body.len());
+            }
             if let Some(response) = response {
                 response.set_status(reply.status);
                 response.set_mime_type(Some(&cs(&reply.mime)));
@@ -345,6 +351,9 @@ wrap_scheme_handler_factory! {
             _scheme_name: Option<&CefString>,
             _request: Option<&mut Request>,
         ) -> Option<ResourceHandler> {
+            if std::env::var_os("CC_DEBUG").is_some() {
+                eprintln!("[scheme] create for {:?}", _request.as_ref().map(|r| us(&r.url())));
+            }
             Some(Handler::new(
                 Arc::new(Mutex::new(Reply::default())),
                 browser.map(|b| b.identifier()).unwrap_or(0),

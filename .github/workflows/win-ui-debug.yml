@@ -9,7 +9,7 @@ on:
         description: Release to test, or empty to build this branch
         default: v1.0-beta
 permissions:
-  contents: read
+  contents: write
 jobs:
   probe:
     runs-on: windows-2025
@@ -18,16 +18,30 @@ jobs:
         shell: pwsh
     steps:
       - uses: actions/checkout@v4
-      - name: Get the build
+      - uses: dtolnay/rust-toolchain@stable
+      - run: choco install ninja -y
+      - uses: actions/cache@v4
+        with:
+          path: C:\cef
+          key: cef-Windows-156.7.0+156.0.31
+      - uses: Swatinem/rust-cache@v2
+        with: { workspaces: rust }
+      - name: Build this branch
+        shell: bash
+        working-directory: rust
         env:
-          GH_TOKEN: ${{ github.token }}
+          CEF_PATH: C:\cef
         run: |
-          $tag = "${{ inputs.tag }}"; if (-not $tag) { $tag = "v1.0-beta" }
-          gh release download $tag -R $env:GITHUB_REPOSITORY -p "*windows-x86_64.zip" -D dl
-          Expand-Archive (Get-ChildItem dl\*.zip).FullName -DestinationPath app
-          $exe = (Get-ChildItem app -Recurse -Filter cottoncandy.exe | Select-Object -First 1).FullName
-          "EXE=$exe" >> $env:GITHUB_ENV
-          New-Item -ItemType Directory out | Out-Null
+          if [ ! -f "$CEF_PATH/archive.json" ]; then
+            cargo install export-cef-dir --version "=156.7.0+156.0.31" --locked
+            export-cef-dir --force "$CEF_PATH"
+          fi
+          cargo build --release -p cottoncandy
+          mkdir -p ../app && cp -r "$CEF_PATH"/. ../app/ && cp target/release/cottoncandy.exe ../app/
+          echo "EXE=$(cygpath -w "$PWD/../app/cottoncandy.exe")" >> "$GITHUB_ENV"
+          mkdir -p ../out
+      - name: Machine
+        run: |
           Get-CimInstance Win32_VideoController | Format-List Name, DriverVersion, CurrentHorizontalResolution, CurrentVerticalResolution
       - name: Run it and look
         run: |
@@ -43,17 +57,21 @@ jobs:
           $b = [System.Windows.Forms.Screen]::PrimaryScreen.Bounds
           ./tools/win-debug/click-type.ps1 -X ([int]($b.Width/2)) -Y ([int]($b.Height/2)) -Text "hello typed"
           Start-Sleep 2
+          node tools/win-debug/values.js
           ./tools/win-debug/shot.ps1 -Path out\3-typed-in-page.png
           ./tools/win-debug/click-type.ps1 -X 400 -Y 62 -Text "address typed"
           Start-Sleep 2
+          node tools/win-debug/values.js
           ./tools/win-debug/shot.ps1 -Path out\4-typed-in-toolbar.png
           Get-Process cottoncandy -ErrorAction SilentlyContinue | Format-Table Id, Responding, MainWindowTitle, CPU
           Stop-Process -Id $p.Id -Force -ErrorAction SilentlyContinue
           Start-Sleep 2
           Get-ChildItem $env:LOCALAPPDATA, $env:APPDATA -Recurse -Filter cef.log -ErrorAction SilentlyContinue | ForEach-Object { Copy-Item $_.FullName out\; "== $($_.FullName)"; Get-Content $_.FullName -Tail 200 }
           Get-Content out\stdout.txt, out\stderr.txt -ErrorAction SilentlyContinue | Select-Object -Last 200
-      - uses: actions/upload-artifact@v4
+      - name: Keep the screenshots on a draft release
         if: always()
-        with:
-          name: win-ui-debug
-          path: out
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release view debug-win-ui -R $env:GITHUB_REPOSITORY 2>$null; if ($LASTEXITCODE -ne 0) { gh release create debug-win-ui -R $env:GITHUB_REPOSITORY --draft --title "debug-win-ui (temporary)" --notes "Temporary screenshots." }
+          gh release upload debug-win-ui -R $env:GITHUB_REPOSITORY --clobber (Get-ChildItem out\*.png).FullName
