@@ -4,6 +4,9 @@ set -euo pipefail
 work=$WORK state=$STATE_DIR
 if [ "$RUNNER_OS" = Windows ]; then
   work=$(cygpath -u "$WORK") state=$(cygpath -u "$STATE_DIR")
+  # Make real Windows symlinks. By default MSYS tar copies the target instead, which fails when the
+  # target comes later in the archive or doesn't exist (Chromium's tree has both kinds).
+  export MSYS=winsymlinks:native
 fi
 case "$1" in
   save)

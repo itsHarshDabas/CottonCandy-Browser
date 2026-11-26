@@ -23,8 +23,17 @@ on:
         type: choice
         options: [windows, linux]
         default: windows
+      resume_run:
+        description: To carry on a chain that stopped, the id of its run (its saved work folder is kept 3 days)
+        type: string
+        default: ""
+      resume_state:
+        description: With resume_run, the number of the last stage that saved its work folder there
+        type: string
+        default: ""
 permissions:
   contents: write
+  actions: read
 concurrency:
   group: cef-codecs-${{ inputs.os || 'windows' }}
 jobs:
@@ -61,7 +70,18 @@ def stage(n):
         run: bash repo/tools/cef-codecs/state.sh restore
 """
     else:
-        s += """      - name: Fetch Chromium and CEF
+        s += """      - uses: actions/download-artifact@v4
+        if: inputs.resume_run != ''
+        with:
+          name: cef-codecs-${{ inputs.os || 'windows' }}-state-${{ inputs.resume_state }}
+          path: ${{ env.STATE_DIR }}
+          run-id: ${{ inputs.resume_run }}
+          github-token: ${{ github.token }}
+      - name: Restore the work folder of the stopped run
+        if: inputs.resume_run != ''
+        run: bash repo/tools/cef-codecs/state.sh restore
+      - name: Fetch Chromium and CEF
+        if: inputs.resume_run == ''
         run: |
           "$PYTHON" repo/tools/cef-codecs/stage.py "$WORK" "$DEADLINE" --checkout
 """
