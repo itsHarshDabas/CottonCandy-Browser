@@ -3,17 +3,23 @@ name: release
 # against Google Chrome on the same runner, and publishes a GitHub release with both packages, SHA256SUMS and
 # the measured numbers. Run by hand with a tag (Actions → release → Run workflow), it does the same and creates
 # the tag. On a pull request that changes it, or run by hand without a tag, it does everything except publish.
+# With "codecs" (or a tag like v1.2-Codec) it builds on the CEF that .github/workflows/cef-codecs.yml made with
+# the MP4 codecs (H.264, AAC), and publishes only the packages that have them.
 on:
   push:
     tags: ["v*"]
   pull_request:
-    paths: [".github/workflows/release.yml", "rust/bench/**", "rust/installer/**", "rust/app/**", "tools/ui-check/**"]
+    paths: [".github/workflows/release.yml", "rust/bench/**", "rust/installer/**", "rust/app/**", "tools/ui-check/**", "tools/cef-codecs/**"]
   workflow_dispatch:
     inputs:
       tag:
         description: "Release tag to create and publish from this commit, like v1.0-beta (empty: build only)"
         type: string
         default: ""
+      codecs:
+        description: "Build on the CEF with the MP4 codecs (H.264, AAC) from the cef-codecs release"
+        type: boolean
+        default: false
 permissions:
   contents: write
 env:
@@ -21,6 +27,8 @@ env:
   # The release being made: a pushed tag, or the tag asked for when run by hand.
   RELEASE_TAG: ${{ github.ref_type == 'tag' && github.ref_name || inputs.tag }}
   CEF_VERSION: "156.7.0+156.0.31"
+  # Whether this build should play MP4: asked for by hand, or a tag that ends in -Codec.
+  CODECS: ${{ inputs.codecs || endsWith(github.ref_name, '-Codec') || endsWith(inputs.tag, '-Codec') }}
 jobs:
   build:
     strategy:
@@ -49,18 +57,47 @@ jobs:
       - name: Windows build deps
         if: runner.os == 'Windows'
         run: choco install ninja -y
+      # The stock CEF plays WebM, AV1 and MP3 but not MP4. For a codecs build, the CEF that cef-codecs.yml built
+      # for this version and OS, if it has built one; an OS it hasn't is built stock and left out of the release.
+      - name: Which CEF
+        id: cef
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          plat=$([ "$RUNNER_OS" = Windows ] && echo windows64 || echo linux64)
+          asset=""
+          if [ "$CODECS" = true ]; then
+            asset=$(gh release view "cef-codecs-${CEF_VERSION#*+}" -R "$GITHUB_REPOSITORY" --json assets \
+              --jq ".assets[].name | select(endswith(\"${plat}_minimal.tar.bz2\"))")
+          fi
+          if [ -n "$asset" ]; then echo "flavor=codecs" >> "$GITHUB_OUTPUT"; else echo "flavor=stock" >> "$GITHUB_OUTPUT"; fi
+          echo "asset=$asset" >> "$GITHUB_OUTPUT"
+          echo "CEF: ${asset:-the stock download}"
       - uses: actions/cache@v4
         with:
           path: ${{ matrix.cef_dir }}
-          key: cef-${{ runner.os }}-${{ env.CEF_VERSION }}
+          key: cef-${{ runner.os }}-${{ env.CEF_VERSION }}-${{ steps.cef.outputs.flavor }}
       - uses: Swatinem/rust-cache@v2
         with: { workspaces: rust }
       - name: Get CEF
+        env:
+          GH_TOKEN: ${{ github.token }}
+          ASSET: ${{ steps.cef.outputs.asset }}
         run: |
           if [ ! -f "$CEF_PATH/archive.json" ]; then
-            cargo install export-cef-dir --version "=$CEF_VERSION" --locked
-            export-cef-dir --force "$CEF_PATH"
+            if [ -n "$ASSET" ]; then
+              tag="cef-codecs-${CEF_VERSION#*+}"
+              gh release download "$tag" -R "$GITHUB_REPOSITORY" -p "$ASSET" -p "$ASSET.sha256" -D "$RUNNER_TEMP/cef"
+              (cd "$RUNNER_TEMP/cef" && sha256sum -c "$ASSET.sha256")
+              py=$(command -v python3 || command -v python)
+              "$py" ../tools/cef-codecs/unpack.py "$RUNNER_TEMP/cef/$ASSET" "$CEF_PATH"
+            else
+              cargo install export-cef-dir --version "=$CEF_VERSION" --locked
+              export-cef-dir --force "$CEF_PATH"
+            fi
           fi
+          # Which CEF this package is on, for the release job.
+          mkdir -p ../dist && echo "${{ steps.cef.outputs.flavor }}" > ../dist/cef-flavor.txt
       - name: Version
         id: version
         run: |
@@ -138,6 +175,11 @@ jobs:
             & "$check\input.ps1" -Keys 'abc' -Slow
             Check value cottoncandy://ui/chrome.html url abc
             Write-Output 'The toolbar loaded, and typing reached the address bar and the find bar.'
+            # An MP4 (H.264 picture, AAC sound) plays on the codecs CEF, and not on the stock one.
+            $server = Start-Process python -ArgumentList '-m', 'http.server', '8099', '--bind', '127.0.0.1', '--directory', $check -PassThru
+            Start-Sleep 3
+            $want = if ((Get-Content cef-flavor.txt) -eq 'codecs') { 'yes' } else { 'no' }
+            try { Check mp4 http://127.0.0.1:8099/ $want } finally { Stop-Process -Id $server.Id -Force -ErrorAction SilentlyContinue }
           } finally {
             Stop-Process -Id $browser.Id -Force -ErrorAction SilentlyContinue
             Get-Process cottoncandy -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue
@@ -182,6 +224,7 @@ jobs:
             dist/*.tar.xz
             dist/*.zip
             dist/*.exe
+            dist/cef-flavor.txt
           if-no-files-found: error
           compression-level: 0
 
@@ -232,10 +275,27 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           mkdir out
-          find artifacts \( -name '*.tar.xz' -o -name '*.zip' -o -name '*.exe' \) -exec mv {} out/ \;
+          missing=""
+          for dir in artifacts/*-x86_64; do
+            # A codecs release has only packages that play MP4.
+            if [ "$CODECS" = true ] && [ "$(cat "$dir/cef-flavor.txt")" != codecs ]; then
+              missing="$missing ${dir#artifacts/}"
+              continue
+            fi
+            find "$dir" \( -name '*.tar.xz' -o -name '*.zip' -o -name '*.exe' \) -exec mv {} out/ \;
+          done
+          [ -n "$(ls out)" ] || { echo "No package to publish." >&2; exit 1; }
+          if [ "$CODECS" = true ]; then
+            media="This build plays MP4 video (H.264) and AAC sound, as well as WebM, AV1 and MP3."
+            [ -z "$missing" ] || media="$media There is no codecs package for${missing} yet; use the regular release there."
+          else
+            media="Plays WebM, AV1, MP3 and Opus. MP4 (H.264, AAC) needs the -Codec release."
+          fi
           (cd out && sha256sum * > SHA256SUMS)
           cat > notes.md <<EOF
-          CottonCandy ${RELEASE_TAG}, the GraceOS web browser on Chromium (CEF ${CEF_VERSION%%+*}), for Linux and Windows.
+          CottonCandy ${RELEASE_TAG}, the GraceOS web browser on Chromium (CEF ${CEF_VERSION%%+*}).
+
+          ${media}
 
           ## Install
           - **Windows:** run \`CottonCandy-Setup-*.exe\`. It installs for you alone (no administrator needed) into
