@@ -124,7 +124,7 @@ jobs:
           $u = Start-Process "$dir\uninstall.exe" -ArgumentList '--silent' -Wait -PassThru
           if ($u.ExitCode -ne 0) { throw "The uninstaller failed ($($u.ExitCode))" }
           # It finishes from a copy in the temp folder, so wait for that.
-          for ($i = 0; $i -lt 60 -and (Test-Path "$dir\cottoncandy.exe"); $i++) { Start-Sleep 1 }
+          for ($i = 0; $i -lt 90 -and ((Test-Path "$dir\cottoncandy.exe") -or (Test-Path "$dir\uninstall.exe")); $i++) { Start-Sleep 1 }
           Start-Sleep 5
           if (Test-Path "$dir\cottoncandy.exe") { throw 'The browser is still there' }
           if (Test-Path "$dir\uninstall.exe") { throw 'uninstall.exe is still there' }
