@@ -91,7 +91,11 @@ def stage(n):
         run: repo/tools/cef-codecs/win-sdk.ps1 -Work $env:WORK
       - name: Linux build dependencies
         if: runner.os == 'Linux'
-        run: sudo "$WORK/chromium/src/build/install-build-deps.sh" --no-prompt --no-chromeos-fonts || sudo "$WORK/chromium/src/build/install-build-deps.sh" --no-prompt
+        # CEF builds against the system libraries (no sysroot). install-build-deps leaves out PipeWire,
+        # which the screen-capture code asks pkg-config for.
+        run: |
+          sudo "$WORK/chromium/src/build/install-build-deps.sh" --no-prompt --no-chromeos-fonts || sudo "$WORK/chromium/src/build/install-build-deps.sh" --no-prompt
+          sudo apt-get install -y --no-install-recommends libpipewire-0.3-dev libspa-0.2-dev
       - name: Build until the deadline
         id: build
         run: |
