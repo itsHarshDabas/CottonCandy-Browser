@@ -27,6 +27,9 @@ AUTOMATE = f"https://raw.githubusercontent.com/chromiumembedded/cef/{CEF_COMMIT}
 # runner's disk; use_siso=false builds with ninja, whose log makes an interrupted build resumable.
 GN_DEFINES = "is_official_build=true proprietary_codecs=true ffmpeg_branding=Chrome symbol_level=0 use_siso=false"
 WINDOWS = sys.platform == "win32"
+if sys.platform.startswith("linux"):
+    # Build against Chromium's Debian sysroot, not the runner's own libraries (see the workflow).
+    GN_DEFINES += " use_sysroot=true"
 
 
 def automate_args(work, checkout):

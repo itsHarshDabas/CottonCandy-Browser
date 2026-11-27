@@ -91,11 +91,12 @@ def stage(n):
         run: repo/tools/cef-codecs/win-sdk.ps1 -Work $env:WORK
       - name: Linux build dependencies
         if: runner.os == 'Linux'
-        # CEF builds against the system libraries (no sysroot). install-build-deps leaves out PipeWire,
-        # which the screen-capture code asks pkg-config for.
+        # The Linux CEF builds against Chromium's Debian sysroot (use_sysroot=true in stage.py), as the
+        # official CEF builds do: it has every header and library the build needs, and the result runs
+        # on older distributions too. install-build-deps still provides the host tools.
         run: |
           sudo "$WORK/chromium/src/build/install-build-deps.sh" --no-prompt --no-chromeos-fonts || sudo "$WORK/chromium/src/build/install-build-deps.sh" --no-prompt
-          sudo apt-get install -y --no-install-recommends libpipewire-0.3-dev libspa-0.2-dev
+          "$PYTHON" "$WORK/chromium/src/build/linux/sysroot_scripts/install-sysroot.py" --arch=amd64
       - name: Build until the deadline
         id: build
         run: |
