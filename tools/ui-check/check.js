@@ -1,6 +1,7 @@
 // Checks a running CottonCandy over the DevTools protocol (it must run with CC_DEBUG_PORT=9222).
 //   node check.js loaded                   the toolbar and new tab page loaded with their styles and scripts
 //   node check.js value <page> <id> <text> the input #id on the page whose address contains <page> holds <text>
+//   node check.js windows                  says what Chromium draws with (the graphics card or the processor)
 //   node check.js mp4 <folder url> <yes|no> sample.mp4 from that folder plays (H.264 picture, AAC sound), or doesn't
 // Exits 1 with a reason when the check fails. Used by release.yml on Windows.
 const { chromium } = require("playwright-core");
@@ -34,6 +35,17 @@ const fail = why => { console.error("FAILED: " + why); process.exit(1); };
     }
     console.log(`${part} #${id}: ${JSON.stringify(values)}`);
     if (!values.includes(want)) fail(`#${id} should hold ${JSON.stringify(want)}`);
+  } else if (mode === "windows") {
+    // Without the manifest's supportedOS, Windows says it is 8 (NT 6.2) and Chromium keeps the GPU off.
+    const page = find("cottoncandy://newtab/") || pages[0];
+    const ua = await page.evaluate(async () => navigator.userAgent + " platformVersion=" +
+      (await navigator.userAgentData.getHighEntropyValues(["platformVersion"])).platformVersion);
+    const cdp = await browser.newBrowserCDPSession();
+    const info = await cdp.send("SystemInfo.getInfo");
+    console.log("userAgent", ua);
+    console.log("gpu", JSON.stringify(info.gpu.featureStatus), JSON.stringify(info.gpu.devices.map(d => d.deviceString)));
+    // GPU process start time: 0 when it never started (what Chromium shows on Windows 8).
+    console.log("gpu process", JSON.stringify(info.gpu.auxAttributes?.initializationTime ?? null), info.gpu.driverBugWorkarounds?.length);
   } else if (mode === "mp4") {
     const [folder, want, file] = args;
     const page = find(folder) || find("cottoncandy://newtab/");

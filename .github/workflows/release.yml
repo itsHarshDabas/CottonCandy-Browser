@@ -160,6 +160,7 @@ jobs:
             Start-Sleep 20
             function Check { node "$check\check.js" @args; if ($LASTEXITCODE -ne 0) { throw "Check failed: $args" } }
             Check loaded
+            Check windows
             # Bring the window to the front with a click on the empty part of the tab row, as a person would.
             & "$check\input.ps1" -X 700 -Y 18
             # The new tab's search box has the keyboard, and hands what you type to the address bar.
