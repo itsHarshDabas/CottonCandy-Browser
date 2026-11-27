@@ -180,7 +180,8 @@ pub enum Slide {
 
 /// How long a panel takes to slide, and how often it moves (about one step per frame).
 const SLIDE_MS: f64 = 180.0;
-const FRAME_MS: i64 = 16;
+/// One frame at 60 Hz.
+const FRAME_MS: f64 = 1000.0 / 60.0;
 
 impl Slide {
     fn width(self, sizes: &Sizes) -> &AtomicI32 {
@@ -232,11 +233,16 @@ fn slide_step(
     if w.slides[which as usize] != generation {
         return;
     }
-    let t = (start.elapsed().as_secs_f64() * 1000.0 / SLIDE_MS).min(1.0);
+    let elapsed = start.elapsed().as_secs_f64() * 1000.0;
+    let t = (elapsed / SLIDE_MS).min(1.0);
     let eased = 1.0 - (1.0 - t).powi(3);
     set_slide_width(w, which, from + ((to - from) as f64 * eased).round() as i32);
     if t < 1.0 {
-        on_ui_later(FRAME_MS, move || {
+        // Wake at the next 60 Hz tick counted from the start, not 16 ms after this step: a late step
+        // (Windows' timer is coarse) then doesn't push every later one back, so the motion stays even.
+        let next = ((elapsed / FRAME_MS).floor() + 1.0) * FRAME_MS;
+        let delay = (next - elapsed).ceil().max(4.0) as i64;
+        on_ui_later(delay, move || {
             with(|ui| slide_step(ui, win, which, generation, from, to, start, after))
         });
     } else {

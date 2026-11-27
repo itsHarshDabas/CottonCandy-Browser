@@ -826,17 +826,38 @@ static PULLING: Mutex<Option<String>> = Mutex::new(None);
 /// Downloads a model through CherryCola's engine and makes it the one Grace uses. Progress comes as
 /// `grace_pull` events ({model, status, percent}); the last has `done` or `error`.
 fn pull(browser_id: i32, args: &Json) -> Res {
-    let model = model_name(args)?;
+    start_pull(browser_id, model_name(args)?, false)
+}
+
+/// Uses a .gguf file on this computer, picked in a file dialog the browser itself showed (the page never
+/// names the path). CherryCola adds it where it is; Ollama keeps its own copy, so that can take a minute.
+pub fn use_model_file(browser_id: i32, path: &std::path::Path) -> Res {
+    let is_gguf = path
+        .extension()
+        .is_some_and(|e| e.eq_ignore_ascii_case("gguf"))
+        && std::fs::File::open(path)
+            .and_then(|mut f| {
+                let mut magic = [0u8; 4];
+                f.read_exact(&mut magic).map(|_| magic == *b"GGUF")
+            })
+            .unwrap_or(false);
+    if !is_gguf {
+        return Err("That isn't a GGUF model file.".into());
+    }
+    start_pull(browser_id, path.to_string_lossy().into_owned(), true)
+}
+
+fn start_pull(browser_id: i32, model: String, file: bool) -> Res {
     {
         let mut pulling = PULLING.lock().map_err(|_| "busy")?;
         if let Some(other) = pulling.as_ref() {
-            return Err(format!("{other} is still downloading."));
+            return Err(format!("{other} is still being added."));
         }
         *pulling = Some(model.clone());
     }
     let cmd = command();
     std::thread::spawn(move || {
-        let result = pull_run(&cmd, &model, browser_id);
+        let result = pull_run(&cmd, &model, file, browser_id);
         if let Ok(mut p) = PULLING.lock() {
             *p = None;
         }
@@ -844,7 +865,7 @@ fn pull(browser_id: i32, args: &Json) -> Res {
             Ok(()) => emit(
                 browser_id,
                 "grace_pull",
-                json!({ "model": model, "done": true }),
+                json!({ "model": model, "done": true, "file": file }),
             ),
             Err(e) => emit(
                 browser_id,
@@ -857,9 +878,10 @@ fn pull(browser_id: i32, args: &Json) -> Res {
     Ok(json!({}))
 }
 
-fn pull_run(cmd: &str, model: &str, browser_id: i32) -> Result<(), String> {
+fn pull_run(cmd: &str, model: &str, file: bool, browser_id: i32) -> Result<(), String> {
+    // "--" so neither a name nor a path is ever read as an option.
     let mut child = base_command(cmd)
-        .args(["pull", model, "--use"])
+        .args(["pull", "--use", "--", model])
         .stdin(Stdio::null())
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())
@@ -892,7 +914,7 @@ fn pull_run(cmd: &str, model: &str, browser_id: i32) -> Result<(), String> {
                     emit(
                         browser_id,
                         "grace_pull",
-                        json!({ "model": model, "status": text, "percent": g::percent(&text) }),
+                        json!({ "model": model, "status": text, "percent": g::percent(&text), "file": file }),
                     );
                 }
                 line.clear();

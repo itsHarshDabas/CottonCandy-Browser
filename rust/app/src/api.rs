@@ -75,6 +75,7 @@ pub fn allowed(host: &str, cmd: &str) -> bool {
             "grace_pull",
             "grace_install",
             "pick_wallpaper",
+            "pick_model_file",
             "wallpaper_from_link",
             "free_memory",
             "open_gpu_report",

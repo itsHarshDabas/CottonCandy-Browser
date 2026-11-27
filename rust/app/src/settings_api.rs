@@ -150,6 +150,21 @@ pub fn call(ui: &mut Ui, browser_id: i32, cmd: &str, args: &Json) -> Res {
             );
             Ok(json!({}))
         }
+        "pick_model_file" => {
+            let browser = page_browser(ui, browser_id).ok_or("no page")?;
+            let host = browser.host().ok_or("no page")?;
+            let mut filters = CefStringList::new();
+            filters.append(".gguf");
+            let mut callback = Picked::new(browser.clone(), "model_file");
+            host.run_file_dialog(
+                FileDialogMode::from(cef_dll_sys::cef_file_dialog_mode_t::FILE_DIALOG_OPEN),
+                Some(&cs("Choose a model file (.gguf)")),
+                None,
+                Some(&mut filters),
+                Some(&mut callback),
+            );
+            Ok(json!({}))
+        }
         "pick_wallpaper" => {
             let browser = page_browser(ui, browser_id).ok_or("no page")?;
             let host = browser.host().ok_or("no page")?;
@@ -448,6 +463,13 @@ wrap_run_file_dialog_callback! {
             }
             let path = paths.into_iter().next().unwrap_or_default();
             if path.is_empty() {
+                return;
+            }
+            if self.purpose == "model_file" {
+                // Progress and the end come as grace_pull events, like a download.
+                if let Err(e) = crate::grace::use_model_file(self.browser.identifier(), std::path::Path::new(&path)) {
+                    run_js(&self.browser, &emit_js("grace_pull", &json!({ "model": path, "error": e, "file": true })));
+                }
                 return;
             }
             if self.purpose == "wallpaper" {
