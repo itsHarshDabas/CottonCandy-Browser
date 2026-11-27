@@ -182,7 +182,10 @@ jobs:
             Write-Output 'The toolbar loaded, and typing reached the address bar and the find bar.'
             # An MP4 (H.264 picture, AAC sound) plays on the codecs CEF, and not on the stock one.
             $server = Start-Process python -ArgumentList '-m', 'http.server', '8099', '--bind', '127.0.0.1', '--directory', $check -PassThru
-            Start-Sleep 3
+            # Wait for the server to answer (it can take a while to start on a busy runner).
+            for ($i = 0; $i -lt 30; $i++) {
+              try { Invoke-WebRequest http://127.0.0.1:8099/sample.mp4 -UseBasicParsing -TimeoutSec 2 | Out-Null; break } catch { Start-Sleep 1 }
+            }
             $want = if ((Get-Content cef-flavor.txt) -eq 'codecs') { 'yes' } else { 'no' }
             try { Check mp4 http://127.0.0.1:8099/ $want } finally { Stop-Process -Id $server.Id -Force -ErrorAction SilentlyContinue }
           } finally {
