@@ -10,6 +10,10 @@
 <link rel="stylesheet" href="/theme.css">
 <style>
   html, body { height: 100%; }
+  /* The panel slides open by growing from the edge. Laid out at its full width all the time, the content
+     moves in with the edge instead of being squeezed and reflowed on every frame. */
+  html { overflow: hidden; }
+  body { min-width: 400px; }
   body { display: flex; flex-direction: column; background: var(--bg-2); border-left: 1px solid var(--hair); overflow: hidden; }
   header { display: flex; align-items: center; gap: 8px; padding: 12px 12px 0 14px; }
   header .spark { width: 18px; height: 18px; color: var(--accent); }

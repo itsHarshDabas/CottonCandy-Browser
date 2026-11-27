@@ -219,7 +219,8 @@
     } else {
       rows.push(row(lbl("No model downloaded yet", "Download one below. Grace uses it right away.")));
     }
-    if (pulling) rows.push(row(`${lbl("Downloading " + pulling.model, pulling.status || "Starting…")}${bar(pulling.percent)}`));
+    if (pulling) rows.push(row(`${lbl(pulling.file ? "Adding " + fileName(pulling.model) : "Downloading " + pulling.model,
+      pulling.status || (pulling.file ? "Nothing is downloaded. Ollama copies the file into its own models once." : "Starting…"))}${bar(pulling.percent)}`));
     const fits = (rec.models || []).filter(m => m.fits);
     if (fits.length) {
       const where = rec.runs_on === "gpu" ? `your graphics card (${rec.vram_gb} GB)` : `the processor (${rec.ram_gb} GB of memory)`;
@@ -231,8 +232,10 @@
     }
     rows.push(row(`<div class="lbl" style="width:100%"><div>Another model</div><div class="sub">An Ollama name (qwen3:8b), a Hugging Face GGUF (Qwen/Qwen3-4B-GGUF:Q4_K_M) or an https link to a .gguf</div>
       <div style="display:flex;gap:8px;margin-top:10px"><input id="ccOther" class="field" style="flex:1;width:auto" placeholder="qwen3:8b" aria-label="Model to download" spellcheck="false"><button class="btn" id="ccPull" ${pulling ? "disabled" : ""}>Download</button></div></div>`, "stack"));
+    rows.push(row(`${lbl("A model file on this computer", "A .gguf you already have. Grace uses it without downloading anything.")}<button class="btn" id="ccFile" ${pulling ? "disabled" : ""}>Choose file…</button>`));
     return card(rows);
   }
+  const fileName = p => String(p).split(/[\\/]/).pop();
   const bar = pct => `<div class="pbar" role="progressbar" ${pct != null ? `aria-valuenow="${Math.round(pct)}"` : ""}><i style="width:${pct != null ? Math.max(2, pct) : 30}%" class="${pct == null ? "busy" : ""}"></i></div>`;
 
   // The picture's color for the accent: the most common lively color, made bright enough to read on.
@@ -399,6 +402,7 @@
     main.querySelectorAll("[data-pull]").forEach(el => el.addEventListener("click", () => pull(el.dataset.pull)));
     main.querySelectorAll("[data-use]").forEach(el => el.addEventListener("click", () => cc.call("grace_use", { model: el.dataset.use }).catch(e => flash("grace", "err", e.message))));
     click("ccPull", () => pull($("ccOther").value.trim()));
+    click("ccFile", () => cc.call("pick_model_file", {}).catch(e => flash("grace", "err", e.message)));
   }
 
   async function installExt() {
@@ -411,7 +415,7 @@
   // ---- events from the browser -------------------------------------------------------------------
   cc.on("grace_models", d => { grace = d; render(); });
   cc.on("grace_pull", d => {
-    if (d.done) { pulling = null; flash("grace", "ok", `Downloaded ${d.model}. Grace uses it now.`); return; }
+    if (d.done) { pulling = null; flash("grace", "ok", d.file ? `Added ${fileName(d.model)}. Grace uses it now.` : `Downloaded ${d.model}. Grace uses it now.`); return; }
     if (d.error) { pulling = null; flash("grace", "err", d.error); return; }
     pulling = d; render();
   });
