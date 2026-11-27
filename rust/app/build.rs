@@ -8,7 +8,10 @@ fn main() {
     #[cfg(windows)]
     {
         println!("cargo:rerun-if-changed=assets/cottoncandy.ico");
+        println!("cargo:rerun-if-changed=assets/cottoncandy.manifest");
         let mut res = winresource::WindowsResource::new();
+        // Says which Windows versions it supports; without it Chromium sees Windows 8 and turns the GPU off.
+        res.set_manifest_file("assets/cottoncandy.manifest");
         res.set_icon("assets/cottoncandy.ico")
             .set("FileDescription", "CottonCandy")
             .set("ProductName", "CottonCandy")
