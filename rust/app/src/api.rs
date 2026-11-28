@@ -11,6 +11,7 @@ use serde_json::{json, Value as Json};
 /// The calls each kind of page may make. "ui" is the toolbar, tab list and popup.
 const UI_CALLS: &[&str] = &[
     "ready",
+    "display_hz",
     "tab_new",
     "tab_close",
     "tab_activate",
@@ -164,6 +165,16 @@ fn call(ui: &mut Ui, win: u32, role: Role, cmd: &str, args: &Json, from_host: &s
             // the page was still loading was lost: send it again now (an empty tab strip on Windows).
             if matches!(role, Role::Chrome | Role::VTabs) {
                 ui.mark(win);
+            }
+            Ok(json!({}))
+        }
+        "display_hz" if role == Role::Chrome => {
+            let hz = args.get("hz").and_then(Json::as_f64).ok_or("hz?")?;
+            if let Some(w) = ui.win(win) {
+                w.frame_ms = 1000.0 / hz.clamp(30.0, 1000.0);
+            }
+            if std::env::var_os("CC_DEBUG").is_some() {
+                eprintln!("[display] window={win} {hz} Hz");
             }
             Ok(json!({}))
         }

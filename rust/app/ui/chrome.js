@@ -395,5 +395,36 @@
     initToolbar();
   }
   // The browser may not have filed this page under its window yet; ask again until it has.
-  (function ready() { cc.call("ready", { role: vertical ? "vtabs" : "chrome" }).catch(() => setTimeout(ready, 50)); })();
+  (function ready() {
+    cc.call("ready", { role: vertical ? "vtabs" : "chrome" }).then(() => { if (!vertical) watchRefresh(); }, () => setTimeout(ready, 50));
+  })();
+
+  // Panel slides are moved by the browser, not by this page, so it needs the screen's refresh rate
+  // (60, 144, 165, 240 Hz...) to step once per frame. Frames come at that rate, so count them; again
+  // when the window may have moved to another screen.
+  function watchRefresh() {
+    let measuring = false, sent = 0;
+    const measure = () => {
+      if (measuring || document.hidden) return;
+      measuring = true;
+      const times = [];
+      const frame = t => {
+        times.push(t);
+        if (times.length < 41) return requestAnimationFrame(frame);
+        measuring = false;
+        const gaps = times.slice(1).map((t, i) => t - times[i]).sort((a, b) => a - b);
+        // A quarter of the way up the gaps, not the middle: a busy moment only ever makes frames late.
+        const hz = Math.round(1000 / gaps[gaps.length >> 2]);
+        if (hz >= 30 && hz <= 1000 && Math.abs(hz - sent) > 1) { sent = hz; call("display_hz", { hz }); }
+      };
+      requestAnimationFrame(frame);
+    };
+    let moved = 0;
+    const later = () => { clearTimeout(moved); moved = setTimeout(measure, 400); };
+    measure();
+    addEventListener("resize", later);
+    document.addEventListener("visibilitychange", later);
+    if (window.screen && "onchange" in screen) screen.addEventListener("change", later);
+    matchMedia(`(resolution: ${devicePixelRatio}dppx)`).addEventListener("change", later);
+  }
 })();

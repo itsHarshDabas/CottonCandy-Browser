@@ -164,6 +164,9 @@ pub struct Win {
     pub close_ready: std::collections::HashSet<i32>,
     pub close_attempts: u32,
     pub maximized: bool,
+    /// One frame of the screen the window is on, in ms (the toolbar page measures it): panel slides
+    /// step once per frame, so they are as smooth at 144 or 240 Hz as the pages are.
+    pub frame_ms: f64,
     pub fullscreen: bool,
     /// Folded side tabs are open while the pointer is over them.
     pub vtabs_expanded: bool,
@@ -178,10 +181,8 @@ pub enum Slide {
     Grace = 1,
 }
 
-/// How long a panel takes to slide, and how often it moves (about one step per frame).
+/// How long a panel takes to slide. It moves once per frame of the window's screen (`Win::frame_ms`).
 const SLIDE_MS: f64 = 180.0;
-/// One frame at 60 Hz.
-const FRAME_MS: f64 = 1000.0 / 60.0;
 
 impl Slide {
     fn width(self, sizes: &Sizes) -> &AtomicI32 {
@@ -206,6 +207,7 @@ pub fn slide(ui: &mut Ui, win: u32, which: Slide, to: i32, after: fn(&mut Ui, u3
         return;
     }
     let generation = w.slides[i];
+    timer::fine(true);
     slide_step(
         ui,
         win,
@@ -229,24 +231,65 @@ fn slide_step(
     start: std::time::Instant,
     after: fn(&mut Ui, u32),
 ) {
-    let Some(w) = ui.win(win) else { return };
-    if w.slides[which as usize] != generation {
+    let Some(w) = ui
+        .win(win)
+        .filter(|w| w.slides[which as usize] == generation)
+    else {
+        timer::fine(false);
         return;
-    }
+    };
     let elapsed = start.elapsed().as_secs_f64() * 1000.0;
     let t = (elapsed / SLIDE_MS).min(1.0);
     let eased = 1.0 - (1.0 - t).powi(3);
     set_slide_width(w, which, from + ((to - from) as f64 * eased).round() as i32);
     if t < 1.0 {
-        // Wake at the next 60 Hz tick counted from the start, not 16 ms after this step: a late step
-        // (Windows' timer is coarse) then doesn't push every later one back, so the motion stays even.
-        let next = ((elapsed / FRAME_MS).floor() + 1.0) * FRAME_MS;
-        let delay = (next - elapsed).ceil().max(4.0) as i64;
+        // Wake at the next frame counted from the start, not one frame after this step: a late step then
+        // doesn't push every later one back, so the motion stays even.
+        let frame = w.frame_ms;
+        let next = ((elapsed / frame).floor() + 1.0) * frame;
+        let delay = (next - elapsed).round().max(1.0) as i64;
         on_ui_later(delay, move || {
             with(|ui| slide_step(ui, win, which, generation, from, to, start, after))
         });
     } else {
+        timer::fine(false);
         after(ui, win);
+    }
+}
+
+/// Windows wakes timers only every 15.6 ms unless asked, too coarse for a 4 ms frame at 240 Hz. While
+/// any panel slides, ask for 1 ms (as Chromium itself does for animations); elsewhere timers are fine.
+mod timer {
+    use std::sync::atomic::{AtomicU32, Ordering};
+    static SLIDING: AtomicU32 = AtomicU32::new(0);
+
+    #[cfg(windows)]
+    #[link(name = "winmm")]
+    unsafe extern "system" {
+        fn timeBeginPeriod(ms: u32) -> u32;
+        fn timeEndPeriod(ms: u32) -> u32;
+    }
+
+    pub fn fine(on: bool) {
+        let before = if on {
+            SLIDING.fetch_add(1, Ordering::Relaxed)
+        } else {
+            match SLIDING.fetch_update(Ordering::Relaxed, Ordering::Relaxed, |n| n.checked_sub(1)) {
+                Ok(n) => n,
+                Err(_) => return,
+            }
+        };
+        #[cfg(windows)]
+        // SAFETY: plain winmm calls with no pointers; every begin is matched by one end.
+        unsafe {
+            if on && before == 0 {
+                timeBeginPeriod(1);
+            } else if !on && before == 1 {
+                timeEndPeriod(1);
+            }
+        }
+        #[cfg(not(windows))]
+        let _ = before;
     }
 }
 
@@ -738,6 +781,7 @@ pub fn open_window(private: bool, urls: Vec<String>) {
             close_ready: Default::default(),
             close_attempts: 0,
             maximized: false,
+            frame_ms: 1000.0 / 60.0,
             fullscreen: false,
             vtabs_expanded: false,
             slides: [0; 2],
