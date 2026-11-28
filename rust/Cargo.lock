@@ -541,7 +541,7 @@ dependencies = [
 
 [[package]]
 name = "cottoncandy"
-version = "1.2.2"
+version = "1.2.3-Codec"
 dependencies = [
  "cef",
  "cef-dll-sys",
@@ -556,7 +556,7 @@ dependencies = [
 
 [[package]]
 name = "cottoncandy-core"
-version = "1.2.2"
+version = "1.2.3-Codec"
 dependencies = [
  "adblock",
  "percent-encoding",
@@ -571,7 +571,7 @@ dependencies = [
 
 [[package]]
 name = "cottoncandy-installer"
-version = "1.2.2"
+version = "1.2.3-Codec"
 dependencies = [
  "eframe",
  "mslnk",
