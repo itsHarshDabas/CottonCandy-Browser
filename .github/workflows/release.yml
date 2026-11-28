@@ -324,5 +324,15 @@ jobs:
           EOF
           pre=""
           case "$RELEASE_TAG" in *-*) pre="--prerelease" ;; esac
-          # Creates the tag at this commit when the release was asked for by hand.
-          gh release create "$RELEASE_TAG" $pre --target "$GITHUB_SHA" --title "CottonCandy $RELEASE_TAG" --notes-file notes.md out/*
+          if gh release view "$RELEASE_TAG" -R "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            # Run again for a release that is already out (a codecs CEF for one more OS has been built since):
+            # replace its packages and notes, and drop any that this run didn't make, so SHA256SUMS lists them all.
+            gh release upload "$RELEASE_TAG" -R "$GITHUB_REPOSITORY" --clobber out/*
+            gh release edit "$RELEASE_TAG" -R "$GITHUB_REPOSITORY" --notes-file notes.md
+            for old in $(gh release view "$RELEASE_TAG" -R "$GITHUB_REPOSITORY" --json assets --jq '.assets[].name'); do
+              [ -e "out/$old" ] || gh release delete-asset "$RELEASE_TAG" "$old" -R "$GITHUB_REPOSITORY" -y
+            done
+          else
+            # Creates the tag at this commit when the release was asked for by hand.
+            gh release create "$RELEASE_TAG" $pre --target "$GITHUB_SHA" --title "CottonCandy $RELEASE_TAG" --notes-file notes.md out/*
+          fi
