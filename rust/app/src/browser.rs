@@ -274,9 +274,16 @@ mod timer {
         let before = if on {
             SLIDING.fetch_add(1, Ordering::Relaxed)
         } else {
-            match SLIDING.fetch_update(Ordering::Relaxed, Ordering::Relaxed, |n| n.checked_sub(1)) {
-                Ok(n) => n,
-                Err(_) => return,
+            let mut n = SLIDING.load(Ordering::Relaxed);
+            loop {
+                if n == 0 {
+                    return;
+                }
+                match SLIDING.compare_exchange_weak(n, n - 1, Ordering::Relaxed, Ordering::Relaxed)
+                {
+                    Ok(_) => break n,
+                    Err(now) => n = now,
+                }
             }
         };
         #[cfg(windows)]
